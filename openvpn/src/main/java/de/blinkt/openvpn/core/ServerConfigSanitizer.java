@@ -16,11 +16,18 @@ import java.util.Set;
  *
  * The config is attacker controlled the moment anyone can tamper with the ServerConfigs response,
  * and the bundled engine is built with HAVE_FORK/HAVE_EXECVE, so directives like up/down/plugin
- * run commands as our own uid. Only directives on ALLOWED_DIRECTIVES survive; everything else is
- * dropped and reported.
+ * run commands as our own uid. Directives on DENIED are removed and reported; everything else
+ * passes through.
  *
- * Scope, so the next reader does not assume more: this keeps a tampered config from reaching the
- * device, not from misdirecting traffic. The endpoint the app injects comes from the ServerList
+ * This is a denylist rather than an allowlist, chosen so the backend can introduce a new inert
+ * directive without it being silently dropped by every already-shipped client. The trade is that
+ * it fails open: a dangerous directive missing from DENIED gets through. What makes that
+ * acceptable here is that the engine is vendored in this repo, so the set of options it
+ * understands is fixed at build time and DENIED is derived from its options.c rather than guessed.
+ * Re-derive it when the vendored OpenVPN is bumped.
+ *
+ * Scope, so the next reader does not assume more: this keeps a tampered config off the device, not
+ * out of the traffic path. The endpoint the app injects comes from the ServerList
  * response, and <ca>/<tls-auth> still arrive from the API, so anyone able to tamper with those can
  * still land a user on a server of their choosing. Closing that needs signed payloads or a pinned
  * node CA, not a bigger allowlist. Traffic steering is knowingly out of scope here.
@@ -34,53 +41,59 @@ import java.util.Set;
 public final class ServerConfigSanitizer {
 
     /**
-     * Directives the server may set. Matching is case sensitive to mirror the engine's streq().
+     * Directives the server may never send, as a directive or as an inline tag.
      *
-     * Anything absent is dropped, so this list has to be validated against a real production
-     * config before shipping, and extended in lockstep whenever the backend starts emitting a
-     * new directive.
+     * Enumerated from the vendored engine's own options.c rather than written from memory, because
+     * a denylist is only as good as its completeness. Re-derive this list whenever the vendored
+     * OpenVPN is bumped: that is the one moment the set of options the engine understands can
+     * change, and it is the review point this design depends on.
      *
-     * Note what is deliberately absent: ca/cert/key/tls-auth/tls-crypt appear only in
-     * ALLOWED_INLINE_TAGS below, so the inline form is accepted while the "ca /path/to/file"
-     * form is not, and the server cannot point the engine at a local file.
+     * Everything not named here passes through, so the backend can start sending a new inert
+     * directive without waiting for clients to catch up.
      */
-    private static final Set<String> ALLOWED_DIRECTIVES = Collections.unmodifiableSet(
+    private static final Set<String> DENIED = Collections.unmodifiableSet(
             new HashSet<>(Arrays.asList(
-                    // remote/proto/port are deliberately absent: getConfigFile() injects its
-                    // own "remote <ip> <port> <proto>" after the dev line, and it only ever
-                    // appended. A server-supplied remote used to survive alongside it, and since
-                    // multiple remotes form a connection list tried in order, one placed above the
-                    // dev line was tried first. The app is now the only source of the endpoint.
-                    "client", "dev", "dev-type", "float",
-                    "nobind", "bind", "lport", "rport",
-                    "resolv-retry", "connect-retry", "connect-retry-max", "connect-timeout",
-                    "persist-key", "persist-tun",
-                    "auth-user-pass", "static-challenge",
-                    "remote-cert-tls", "remote-cert-eku", "verify-x509-name",
-                    "cipher", "data-ciphers", "data-ciphers-fallback", "auth",
-                    "tls-client", "tls-version-min", "tls-version-max",
-                    "tls-cipher", "tls-ciphersuites",
-                    "key-direction", "reneg-sec", "reneg-bytes", "reneg-pkts",
-                    "hand-window", "tran-window",
-                    "comp-lzo", "compress", "allow-compression",
-                    "tun-mtu", "tun-mtu-extra", "mssfix", "fragment", "sndbuf", "rcvbuf",
-                    "keepalive", "ping", "ping-restart", "ping-exit", "ping-timer-rem",
-                    "explicit-exit-notify", "mute-replay-warnings", "replay-window",
-                    "verb", "mute",
-                    // Traffic steering. Legitimate for a VPN, but a hostile config server can use
-                    // these to move DNS or routes while the UI still reads Connected. Drop them
-                    // here if the client ever sets its own routes and DNS instead.
-                    "pull", "route", "route-ipv6", "route-nopull",
-                    "redirect-gateway", "redirect-private", "dhcp-option", "topology",
-                    // Windscribe anti-censorship tweaks appended in VPNProfileCreator.
-                    "udp-stuffing", "tcp-split-reset"
+                    // Command execution. Every option that reaches set_user_script() in options.c.
+                    "up", "down", "route-up", "route-pre-down", "ipchange", "tls-verify",
+                    "auth-user-pass-verify", "client-connect", "client-crresponse",
+                    "client-disconnect", "learn-address", "dns-updown", "tls-crypt-v2-verify",
+                    // Loads native code. None of these are gated by script-security.
+                    "plugin", "providers", "engine", "pkcs11-providers",
+                    // Gates the above. Also set on the command line as a backstop.
+                    "script-security",
+                    // Privilege and process state.
+                    "user", "group", "daemon", "chroot", "cd", "setcon", "inetd", "writepid",
+                    // Reads or writes local files by path.
+                    "tmp-dir", "log", "log-append", "status", "client-config-dir", "askpass",
+                    "capath", "config", "replay-persist", "ifconfig-pool-persist",
+                    // The endpoint is ours. getConfigFile() injects its own remote after the dev
+                    // line but only ever appended, and multiple remotes form a connection list
+                    // tried in order, so one placed above the dev line was tried first.
+                    "remote", "remote-random", "proto", "port",
+                    "http-proxy", "http-proxy-option", "http-proxy-user-pass", "socks-proxy",
+                    // The management channel is ours; the app writes its own block.
+                    "management", "management-client", "management-client-auth",
+                    "management-client-group", "management-client-user", "management-external-cert",
+                    "management-external-key", "management-forget-disconnect", "management-hold",
+                    "management-log-cache", "management-query-passwords", "management-query-proxy",
+                    "management-query-remote", "management-signal", "management-up-down"
             )));
 
-    /** Inline blocks the server may open. The body is copied through unread. */
-    private static final Set<String> ALLOWED_INLINE_TAGS = Collections.unmodifiableSet(
+    /**
+     * Key material: refused as a directive, allowed as an inline block.
+     *
+     * "ca /data/data/..." would point the engine at a local file, while the inline form carries
+     * its own bytes and names nothing on disk. The real config uses the inline form.
+     */
+    private static final Set<String> DENIED_AS_PATH = Collections.unmodifiableSet(
             new HashSet<>(Arrays.asList(
-                    "ca", "cert", "key", "tls-auth", "tls-crypt", "tls-crypt-v2", "extra-certs"
+                    "ca", "cert", "key", "dh", "pkcs12", "crl-verify", "extra-certs", "secret",
+                    "tls-auth", "tls-crypt", "tls-crypt-v2"
             )));
+
+    /** Fine bare, refused with an argument, which would name a file to read credentials from. */
+    private static final Set<String> DENIED_WITH_ARGUMENT = Collections.unmodifiableSet(
+            new HashSet<>(Collections.singletonList("auth-user-pass")));
 
     private ServerConfigSanitizer() {
     }
@@ -131,20 +144,25 @@ public final class ServerConfigSanitizer {
 
             String tag = inlineTag(line);
             if (tag != null) {
-                if (ALLOWED_INLINE_TAGS.contains(tag)) {
-                    kept.add(line);
-                    copyingTag = tag;
-                } else {
+                // An inline tag is an option name: check_inline_file() turns <up>body</up> into
+                // option "up" with the body as its argument, so a block is as dangerous as a line.
+                if (DENIED.contains(tag)) {
                     dropped.add("<" + tag + ">");
                     skippingTag = tag;  // discard the body too, or it is read as directives
+                } else {
+                    kept.add(line);
+                    copyingTag = tag;
                 }
                 continue;
             }
 
-            if (ALLOWED_DIRECTIVES.contains(token)) {
-                kept.add(line);
-            } else {
+            boolean refuse = DENIED.contains(token)
+                    || DENIED_AS_PATH.contains(token)
+                    || (DENIED_WITH_ARGUMENT.contains(token) && hasArgument(line));
+            if (refuse) {
                 dropped.add(token);
+            } else {
+                kept.add(line);
             }
         }
 
@@ -204,8 +222,19 @@ public final class ServerConfigSanitizer {
      * treatment of the terminating NUL as whitespace.
      */
     static String firstToken(String line) {
+        List<String> t = parseTokens(line, 1);
+        return t.isEmpty() ? null : t.get(0);
+    }
+
+    /** True if the line carries a parameter after the directive name. */
+    private static boolean hasArgument(String line) {
+        return parseTokens(line, 2).size() > 1;
+    }
+
+    private static List<String> parseTokens(String line, int limit) {
         final int INITIAL = 0, QUOTED = 1, UNQUOTED = 2, DONE = 3, SQUOTED = 4;
 
+        List<String> tokens = new ArrayList<>();
         int state = INITIAL;
         boolean backslash = false;
         StringBuilder parm = new StringBuilder();
@@ -253,7 +282,12 @@ public final class ServerConfigSanitizer {
                 }
 
                 if (state == DONE) {
-                    return parm.toString();
+                    tokens.add(parm.toString());
+                    if (tokens.size() >= limit) {
+                        return tokens;
+                    }
+                    parm.setLength(0);
+                    state = INITIAL;
                 }
                 backslash = false;
             }
@@ -266,6 +300,6 @@ public final class ServerConfigSanitizer {
             }
             i++;
         }
-        return null;
+        return tokens;
     }
 }

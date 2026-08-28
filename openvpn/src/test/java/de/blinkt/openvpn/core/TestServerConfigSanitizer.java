@@ -102,6 +102,42 @@ public class TestServerConfigSanitizer {
     }
 
     @Test
+    public void removesOptionsThatLoadNativeCode() {
+        // None of these are gated by script-security, so the argv backstop does not cover them.
+        assertRemoved("pkcs11-providers /data/local/tmp/PWNED.so");
+        assertRemoved("providers /data/local/tmp/PWNED.so");
+        assertRemoved("engine PWNED");
+    }
+
+    @Test
+    public void removesTheDnsUpdownHook() {
+        // Added in OpenVPN 2.6 and easy to miss by hand: it reaches set_user_script() like --up.
+        assertRemoved("dns-updown" + CMD);
+    }
+
+    @Test
+    public void removesTheManagementFamily() {
+        // The app writes its own management block and talks to it for credentials.
+        assertRemoved("management /data/data/PWNED unix");
+        assertRemoved("management-external-key PWNED");
+        assertRemoved("management-up-down PWNED");
+    }
+
+    @Test
+    public void refusesAuthUserPassOnlyWhenItNamesAFile() {
+        // Bare form is required: it makes the engine ask for credentials over management.
+        assertKept("auth-user-pass");
+        assertRemoved("auth-user-pass /data/data/PWNED");
+    }
+
+    @Test
+    public void letsUnknownInertDirectivesThrough() {
+        // The point of the denylist: the backend can add an option without a client release.
+        assertKept("mssfix 1300");
+        assertKept("some-future-option 5");
+    }
+
+    @Test
     public void keepsARealServerConfig() {
         assertKept("client");
         assertKept("dev tun");
