@@ -29,16 +29,16 @@ abstract class ServerDao {
     @Query("DELETE FROM Server")
     abstract suspend fun deleteAll()
 
-    @Query("SELECT * FROM Server WHERE datacenter_id = :datacenterId ORDER BY weight DESC")
+    @Query("SELECT * FROM Server WHERE datacenter_id = :datacenterId AND force_disconnect = 0 ORDER BY weight DESC")
     abstract suspend fun getServersByDatacenter(datacenterId: Int): List<Server>
 
     @Query("SELECT * FROM Server WHERE server_id = :serverId")
     abstract suspend fun getServerById(serverId: Int): Server?
 
-    @Query("SELECT * FROM Server ORDER BY datacenter_id, weight DESC")
+    @Query("SELECT * FROM Server WHERE force_disconnect = 0 ORDER BY datacenter_id, weight DESC")
     abstract suspend fun getAllServers(): List<Server>
 
-    @Query("SELECT * FROM Server ORDER BY datacenter_id, weight DESC")
+    @Query("SELECT * FROM Server WHERE force_disconnect = 0 ORDER BY datacenter_id, weight DESC")
     abstract fun observeAllServers(): Flow<List<Server>>
 
     @Query("SELECT COUNT(*) FROM Server")

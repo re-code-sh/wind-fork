@@ -45,7 +45,6 @@ import com.windscribe.vpn.repository.CallResult
 import com.windscribe.vpn.repository.EmergencyConnectRepository
 import com.windscribe.vpn.repository.LocationRepository
 import com.windscribe.vpn.repository.WgConfigRepository
-import com.windscribe.vpn.serverlist.entity.Datacenter
 import com.windscribe.vpn.serverlist.entity.Server
 import com.windscribe.vpn.services.canAccessNetworkName
 import com.windscribe.vpn.services.startAutoConnectService
@@ -153,9 +152,8 @@ open class WindVpnController
 
         private var lastUsedRandomIndex = 0
 
-        private suspend fun getForcedNodeIndex(city: Datacenter): Int {
+        private fun getForcedNodeIndex(nodes: List<Server>): Int {
             val forceNode = advanceParameterRepository.get().getForceNode()
-            val nodes = localDbInterface.getServersByDatacenter(city.id)
             return if (forceNode != null && nodes.isNotEmpty()) {
                 nodes.indexOfFirst { WindUtilities.hostnamesMatch(it.hostname, forceNode) }
             } else {
@@ -173,7 +171,10 @@ open class WindVpnController
                 localDbInterface.getDatacenterAndLocation(selectedCity)
                     ?: throw Exception("City not found in database: $selectedCity")
             val city = cityAndRegion.datacenter
-            val nodes = localDbInterface.getServersByDatacenter(city.id)
+            val nodes = localDbInterface.getServersByDatacenter(city.id).filter { it.isConnectable }
+            if (nodes.isEmpty()) {
+                throw Exception("No eligible node in datacenter: ${city.id}")
+            }
             val pinnedIp =
                 localDbInterface
                     .getFavouritesAsync()
@@ -189,7 +190,7 @@ open class WindVpnController
                 }
             }
             // Node with forced hostname from advance parameter
-            val forcedNodeIndex = getForcedNodeIndex(city)
+            val forcedNodeIndex = getForcedNodeIndex(nodes)
             if (forcedNodeIndex != -1) {
                 logger.debug("Forcing node to {}", nodes[forcedNodeIndex])
                 randomIndex = forcedNodeIndex

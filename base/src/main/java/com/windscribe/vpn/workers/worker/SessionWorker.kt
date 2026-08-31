@@ -87,7 +87,9 @@ class SessionWorker
                 }
                 // Update server list when: server list changed, account changed, or migration required
                 // All these cases set migrationRequired = true which forces full server refresh
-                if (changed[0] || changed[2] || changed[3]) {
+                // A pending inventory delta also needs the worker: it applies the node changes
+                // (including fd=1 force disconnect flags) and evacuates the current node if needed.
+                if (changed[0] || changed[2] || changed[3] || userSessionResponse.serverInventory?.hasPendingDelta() == true) {
                     workManager.updateServerList()
                 }
 

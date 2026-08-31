@@ -55,7 +55,10 @@ class ServerListWorker
                     locationRepository.setSelectedCity(updatedLocation)
                     vpnController.connectAsync()
                 } else if (preferencesHelper.globalUserConnectionPreference && !locationRepository.isNodeAvailable()) {
-                    logger.debug("Missing currently connected node Now Reconnecting to same location.")
+                    logger.debug(
+                        "Currently connected node is no longer eligible (removed or force disconnected). " +
+                            "Now reconnecting to same location.",
+                    )
                     vpnController.connectAsync()
                 }
             } catch (e: Exception) {
