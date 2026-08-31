@@ -183,6 +183,7 @@ open class BaseApplicationModule {
             .addMigrations(Migrations.migration_39_40)
             .addMigrations(Migrations.migration_40_41)
             .addMigrations(Migrations.migration_41_42)
+            .addMigrations(Migrations.migration_42_43)
             .build()
 
     @Provides

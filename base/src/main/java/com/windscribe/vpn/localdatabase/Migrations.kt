@@ -260,6 +260,15 @@ object Migrations {
             }
         }
 
+    val migration_42_43: Migration =
+        object : Migration(42, 43) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Server ADD COLUMN force_disconnect INTEGER NOT NULL DEFAULT 0")
+                invalidateData()
+                logger.debug("Migrated db from version:42 to version:43 - Server force_disconnect column")
+            }
+        }
+
     private fun invalidateData() {
         Windscribe.appContext.preference.migrationRequired = true
     }

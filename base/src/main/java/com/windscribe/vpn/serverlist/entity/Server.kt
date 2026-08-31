@@ -55,4 +55,19 @@ data class Server(
     @Expose
     @ColumnInfo(name = "ipv6", defaultValue = "0")
     val ipv6: Int = 0,
-)
+    /**
+     * Node level force disconnect flag. Set to 1 while the node is being drained for maintenance.
+     * Drained nodes stay in the server list so connected clients can move away gracefully, but
+     * they must not be used for new connections. See [isConnectable].
+     */
+    @SerializedName("fd")
+    @Expose
+    @ColumnInfo(name = "force_disconnect", defaultValue = "0")
+    val forceDisconnect: Int = 0,
+) {
+    /**
+     * A node is a valid connection candidate unless the server list flagged it for force disconnect.
+     */
+    val isConnectable: Boolean
+        get() = forceDisconnect != 1
+}

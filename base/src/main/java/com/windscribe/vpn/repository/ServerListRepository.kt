@@ -326,6 +326,7 @@ class ServerListRepository
                                     weight = serverData.weight,
                                     health = serverData.health,
                                     ipv6 = serverData.ipv6,
+                                    forceDisconnect = serverData.forceDisconnect,
                                 )
                             }
                         localDbInterface.deleteAllServers()
@@ -352,18 +353,22 @@ class ServerListRepository
          */
         private suspend fun updateServersDelta(serverInventory: ServerInventory) {
             when (serverInventory.action) {
-                "hold" -> {
+                ServerInventory.ACTION_HOLD -> {
                     logger.debug("V2: Hold action received - not updating this session")
                     return
                 }
 
-                "delta" -> {
+                ServerInventory.ACTION_DELTA -> {
                     val enabledCount = serverInventory.enabled?.size ?: 0
                     val disabledCount = serverInventory.disabled?.size ?: 0
                     if (enabledCount == 0 && disabledCount == 0) {
                         return
                     }
-                    logger.debug("V2: Delta update - enabling $enabledCount servers, disabling $disabledCount servers")
+                    val forceDisconnectCount = serverInventory.enabled?.count { it.forceDisconnect == 1 } ?: 0
+                    logger.debug(
+                        "V2: Delta update - enabling $enabledCount servers, disabling $disabledCount servers, " +
+                            "$forceDisconnectCount flagged for force disconnect",
+                    )
                     serverInventory.enabled?.let { enabledServers ->
                         val servers =
                             enabledServers.map { serverData ->
@@ -376,6 +381,8 @@ class ServerListRepository
                                     datacenterId = serverData.datacenterId,
                                     weight = serverData.weight,
                                     health = serverData.health,
+                                    ipv6 = serverData.ipv6,
+                                    forceDisconnect = serverData.forceDisconnect,
                                 )
                             }
                         localDbInterface.addServers(servers)
