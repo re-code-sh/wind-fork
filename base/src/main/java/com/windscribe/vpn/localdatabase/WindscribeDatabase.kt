@@ -39,7 +39,7 @@ import javax.inject.Singleton
         Datacenter::class, Server::class, Favourite::class, PingTime::class, StaticRegion::class, NetworkInfo::class, ConfigFile::class,
         WindNotification::class, UnBlockWgParam::class, ExcludedIpDomain::class,
     ],
-    version = 42,
+    version = 43,
     exportSchema = true,
 )
 @Singleton

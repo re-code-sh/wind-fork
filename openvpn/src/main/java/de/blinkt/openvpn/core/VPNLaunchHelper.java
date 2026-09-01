@@ -69,6 +69,14 @@ public class VPNLaunchHelper {
         args.add("--config");
         args.add(getConfigFilePath(c));
 
+        // Defence in depth behind ServerConfigSanitizer. Options are processed in argv order and
+        // script_security_set() is last-write-wins, so passing this after --config overrides any
+        // script-security the config managed to set. 1 is the engine's own compiled-in default
+        // (SSEC_BUILT_IN), so behaviour is unchanged, but openvpn_execve_allowed() then refuses
+        // every up/down/route-up script even if the allowlist above ever misses one.
+        args.add("--script-security");
+        args.add("1");
+
         return args.toArray(new String[0]);
     }
 

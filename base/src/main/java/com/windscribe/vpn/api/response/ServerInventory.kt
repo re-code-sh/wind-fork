@@ -29,7 +29,19 @@ data class ServerInventory(
     @SerializedName("amneziawg_config_id")
     @Expose
     var amneziaWgConfigId: String? = null,
-)
+) {
+    /**
+     * True when this response carries node changes that have not been applied locally yet. The API
+     * keeps returning the same delta until the client reports the matching revision, so it is safe
+     * to use this to kick off a server list update.
+     */
+    fun hasPendingDelta(): Boolean = action == ACTION_DELTA && (enabled?.isNotEmpty() == true || disabled?.isNotEmpty() == true)
+
+    companion object {
+        const val ACTION_DELTA = "delta"
+        const val ACTION_HOLD = "hold"
+    }
+}
 
 @Keep
 data class DisabledServer(

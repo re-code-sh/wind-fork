@@ -1236,7 +1236,15 @@ public class VpnProfile implements Serializable, Cloneable {
             @Nullable String stunnelRoutingIp, @Nullable String X509Name, boolean configForOvpn3,
             String windServerConfig) {
         File cacheDir = context.getCacheDir();
-        String[] serverConfigLines = windServerConfig.split(System.getProperty("line.separator"));
+        ServerConfigSanitizer.Result sanitized = ServerConfigSanitizer.sanitize(windServerConfig);
+        if (!sanitized.dropped.isEmpty()) {
+            // Server-supplied config is only trustworthy while the API response is. Anything the
+            // allowlist removed either means a tampered response or a backend change we have not
+            // caught up with, and both need to be visible.
+            VpnStatus.logError("Removed disallowed directives from server config: "
+                    + TextUtils.join(", ", sanitized.dropped));
+        }
+        String[] serverConfigLines = sanitized.config.split("\n");
         StringBuilder cfg = new StringBuilder();
 
         // Enable management interface
@@ -1309,7 +1317,15 @@ public class VpnProfile implements Serializable, Cloneable {
 
     private String getConfigFileBlocking(Context context, String windServerConfig) {
         File cacheDir = context.getCacheDir();
-        String[] serverConfigLines = windServerConfig.split(System.getProperty("line.separator"));
+        ServerConfigSanitizer.Result sanitized = ServerConfigSanitizer.sanitize(windServerConfig);
+        if (!sanitized.dropped.isEmpty()) {
+            // Server-supplied config is only trustworthy while the API response is. Anything the
+            // allowlist removed either means a tampered response or a backend change we have not
+            // caught up with, and both need to be visible.
+            VpnStatus.logError("Removed disallowed directives from server config: "
+                    + TextUtils.join(", ", sanitized.dropped));
+        }
+        String[] serverConfigLines = sanitized.config.split("\n");
         StringBuilder cfg = new StringBuilder();
 
         // Enable management interface

@@ -121,8 +121,25 @@ object WindUtilities {
         val capabilities =
             connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
                 ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        // activeNetwork is resolved per uid, so it points at our own tunnel once connected.
+        // Some platforms (Android 7.x / Fire OS) never add INTERNET to a VPN network, so a
+        // plain capability check there would report us offline while traffic flows fine.
+        if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+        ) {
+            return false
+        }
+        if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+            return true
+        }
+        return appContext.isRegionRestricted &&
+            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) &&
+            (
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            )
     }
 
     /**

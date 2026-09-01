@@ -47,4 +47,7 @@ data class ServerData(
     @SerializedName("ipv6")
     @Expose
     val ipv6: Int = 0,
+    @SerializedName("fd")
+    @Expose
+    val forceDisconnect: Int = 0,
 )
