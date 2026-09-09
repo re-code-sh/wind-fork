@@ -14,9 +14,11 @@ import com.windscribe.vpn.apppreference.PreferencesHelper
 import com.windscribe.vpn.apppreference.SecurePreferences
 import com.windscribe.vpn.apppreference.windscribeDataStore
 import com.windscribe.vpn.autoconnection.AutoConnectionManager
+import com.windscribe.vpn.backend.CdLib
 import com.windscribe.vpn.backend.PlayIntegrityManager
 import com.windscribe.vpn.backend.ProxyDNSManager
 import com.windscribe.vpn.backend.TrafficCounter
+import com.windscribe.vpn.backend.VirtualDeviceManager
 import com.windscribe.vpn.backend.VpnBackendHolder
 import com.windscribe.vpn.backend.ikev2.IKev2VpnBackend
 import com.windscribe.vpn.backend.openvpn.OpenVPNBackend
@@ -44,6 +46,8 @@ import com.windscribe.vpn.localdatabase.UserStatusDao
 import com.windscribe.vpn.localdatabase.WindNotificationDao
 import com.windscribe.vpn.localdatabase.WindscribeDatabase
 import com.windscribe.vpn.mocklocation.MockLocationManager
+import com.windscribe.vpn.repository.AccountVaultRepository
+import com.windscribe.vpn.repository.AccountVaultRepositoryImpl
 import com.windscribe.vpn.repository.AdvanceParameterRepository
 import com.windscribe.vpn.repository.AdvanceParameterRepositoryImpl
 import com.windscribe.vpn.repository.CheckUpdateRepository
@@ -209,10 +213,19 @@ open class BaseApplicationModule {
 
     @Provides
     @Singleton
+    fun provideCdLib(): CdLib = CdLib()
+
+    @Provides
+    @Singleton
+    fun provideVirtualDeviceManager(): VirtualDeviceManager = VirtualDeviceManager()
+
+    @Provides
+    @Singleton
     fun provideCtrldManager(
         coroutineScope: CoroutineScope,
         preferencesHelper: PreferencesHelper,
-    ): ProxyDNSManager = ProxyDNSManager(coroutineScope, preferencesHelper)
+        cdLib: CdLib,
+    ): ProxyDNSManager = ProxyDNSManager(coroutineScope, preferencesHelper, cdLib)
 
     @Provides
     @Singleton
@@ -439,6 +452,27 @@ open class BaseApplicationModule {
             googleSignInManager,
             unblockWgParamsRepository,
             wgConfigRepository,
+        )
+
+    @Provides
+    @Singleton
+    fun provideAccountVaultRepository(
+        accountDao: AccountDao,
+        virtualDeviceManager: VirtualDeviceManager,
+        preferencesHelper: PreferencesHelper,
+        userRepository: UserRepository,
+        cdLib: CdLib,
+        apiManager: IApiCallManager,
+        scope: CoroutineScope,
+    ): AccountVaultRepository =
+        AccountVaultRepositoryImpl(
+            accountDao = accountDao,
+            virtualDeviceManager = virtualDeviceManager,
+            preferencesHelper = preferencesHelper,
+            userRepository = userRepository,
+            cdLib = cdLib,
+            apiManager = apiManager,
+            scope = scope,
         )
 
     @Provides

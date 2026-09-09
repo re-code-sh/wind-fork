@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class ProxyDNSManager(
     val scope: CoroutineScope,
     val preferenceHelper: PreferencesHelper,
+    private val cdLib: CdLib = CdLib(),
 ) {
     companion object {
         const val CONFIG_FILE = "config.toml"
@@ -48,7 +49,6 @@ class ProxyDNSManager(
         private const val READY_MAX_ATTEMPTS = 100
     }
 
-    private var cdLib = CdLib()
     private var controlDJob: Job? = null
     var dnsDetails: DNSDetails? = null
     var invalidConfig = false
