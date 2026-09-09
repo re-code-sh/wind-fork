@@ -127,6 +127,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.coroutines.get()}")
     testImplementation("io.mockk:mockk:1.14.7")
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+
     // Google only dependencies
     "googleApi"("com.google.firebase:firebase-messaging:${libs.versions.firebase.get()}")
     "googleApi"(files("$projectDir/src/google/libs/in-app-purchasing-2.0.76.jar"))

@@ -269,6 +269,31 @@ object Migrations {
             }
         }
 
+    val migration_43_44: Migration =
+        object : Migration(43, 44) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `account_vault` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`username` TEXT NOT NULL, " +
+                        "`sessionAuthHash` TEXT NOT NULL, " +
+                        "`rawSessionJson` TEXT NOT NULL, " +
+                        "`dataLeft` INTEGER NOT NULL, " +
+                        "`trafficMax` INTEGER NOT NULL, " +
+                        "`trafficUsed` INTEGER NOT NULL, " +
+                        "`isPro` INTEGER NOT NULL, " +
+                        "`isActive` INTEGER NOT NULL, " +
+                        "`virtualCuid` TEXT NOT NULL, " +
+                        "`virtualMac` TEXT NOT NULL, " +
+                        "`virtualHostName` TEXT NOT NULL, " +
+                        "`sessionStatus` TEXT NOT NULL, " +
+                        "`lastSyncTimestamp` INTEGER NOT NULL)",
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_account_vault_username` ON `account_vault` (`username`)")
+                logger.debug("Migrated db from version:43 to version:44 - Created account_vault table")
+            }
+        }
+
     private fun invalidateData() {
         Windscribe.appContext.preference.migrationRequired = true
     }

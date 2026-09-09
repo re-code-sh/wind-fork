@@ -3,6 +3,7 @@
  */
 package com.windscribe.vpn.localdatabase
 
+import com.windscribe.vpn.localdatabase.tables.AccountEntity
 import com.windscribe.vpn.localdatabase.tables.ExcludedIpDomain
 import com.windscribe.vpn.localdatabase.tables.NetworkInfo
 import com.windscribe.vpn.localdatabase.tables.PopupNotificationTable
@@ -169,4 +170,28 @@ interface LocalDbInterface {
     suspend fun getStaleExcludedHostnames(staleTimestamp: Long): List<ExcludedIpDomain>
 
     suspend fun getAllExcludedHostnames(): List<ExcludedIpDomain>
+
+    // Account Vault
+    suspend fun insertOrUpdateAccount(account: AccountEntity): Long
+
+    suspend fun getActiveAccount(): AccountEntity?
+
+    fun getAllAccounts(): Flow<List<AccountEntity>>
+
+    suspend fun getAllAccountsSync(): List<AccountEntity>
+
+    suspend fun getAccountById(id: Long): AccountEntity?
+
+    suspend fun getAccountByUsername(username: String): AccountEntity?
+
+    suspend fun setActiveAccount(id: Long)
+
+    suspend fun deleteAccountById(id: Long)
+
+    suspend fun updateAccountTraffic(
+        id: Long,
+        dataUsed: Long,
+        dataMax: Long,
+        dataLeft: Long,
+    )
 }

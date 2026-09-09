@@ -3,6 +3,7 @@
  */
 package com.windscribe.vpn.localdatabase
 
+import com.windscribe.vpn.localdatabase.tables.AccountEntity
 import com.windscribe.vpn.localdatabase.tables.ExcludedIpDomain
 import com.windscribe.vpn.localdatabase.tables.NetworkInfo
 import com.windscribe.vpn.localdatabase.tables.PopupNotificationTable
@@ -52,6 +53,7 @@ class LocalDatabaseImpl
         private val windNotificationDao: WindNotificationDao,
         private val unblockWgDao: UnblockWgDao,
         private val excludedIpDomainDao: ExcludedIpDomainDao,
+        private val accountDao: AccountDao,
     ) : LocalDbInterface {
         // Suspend functions (Coroutines)
         override suspend fun addNetwork(networkInfo: NetworkInfo): Long = networkInfoDao.addNetwork(networkInfo)
@@ -266,4 +268,28 @@ class LocalDatabaseImpl
             excludedIpDomainDao.getStaleHostnames(staleTimestamp)
 
         override suspend fun getAllExcludedHostnames(): List<ExcludedIpDomain> = excludedIpDomainDao.getAllHostnames()
+
+        // Account Vault
+        override suspend fun insertOrUpdateAccount(account: AccountEntity): Long = accountDao.insertOrUpdate(account)
+
+        override suspend fun getActiveAccount(): AccountEntity? = accountDao.getActiveAccount()
+
+        override fun getAllAccounts(): Flow<List<AccountEntity>> = accountDao.getAllAccounts()
+
+        override suspend fun getAllAccountsSync(): List<AccountEntity> = accountDao.getAllAccountsSync()
+
+        override suspend fun getAccountById(id: Long): AccountEntity? = accountDao.getAccountById(id)
+
+        override suspend fun getAccountByUsername(username: String): AccountEntity? = accountDao.getAccountByUsername(username)
+
+        override suspend fun setActiveAccount(id: Long) = accountDao.setActiveAccount(id)
+
+        override suspend fun deleteAccountById(id: Long) = accountDao.deleteAccountById(id)
+
+        override suspend fun updateAccountTraffic(
+            id: Long,
+            dataUsed: Long,
+            dataMax: Long,
+            dataLeft: Long,
+        ) = accountDao.updateTraffic(id, dataUsed, dataMax, dataLeft)
     }

@@ -31,6 +31,7 @@ import com.windscribe.vpn.billing.PurchaseManager
 import com.windscribe.vpn.constants.NetworkKeyConstants
 import com.windscribe.vpn.constants.NotificationConstants
 import com.windscribe.vpn.decoytraffic.DecoyTrafficController
+import com.windscribe.vpn.localdatabase.AccountDao
 import com.windscribe.vpn.localdatabase.ExcludedIpDomainDao
 import com.windscribe.vpn.localdatabase.LocalDatabaseImpl
 import com.windscribe.vpn.localdatabase.LocalDbInterface
@@ -184,6 +185,7 @@ open class BaseApplicationModule {
             .addMigrations(Migrations.migration_40_41)
             .addMigrations(Migrations.migration_41_42)
             .addMigrations(Migrations.migration_42_43)
+            .addMigrations(Migrations.migration_43_44)
             .build()
 
     @Provides
@@ -192,6 +194,10 @@ open class BaseApplicationModule {
         scope: CoroutineScope,
         wsNetWrapper: WSNetWrapper,
     ): DeviceStateManager = DeviceStateManager(scope, wsNetWrapper)
+
+    @Provides
+    @Singleton
+    fun provideAccountDao(windscribeDatabase: WindscribeDatabase): AccountDao = windscribeDatabase.accountDao()
 
     @Provides
     @Singleton
@@ -227,6 +233,7 @@ open class BaseApplicationModule {
         windNotificationDao: WindNotificationDao,
         unblockWgDao: UnblockWgDao,
         excludedIpDomainDao: ExcludedIpDomainDao,
+        accountDao: AccountDao,
     ): LocalDbInterface =
         LocalDatabaseImpl(
             userStatusDao,
@@ -245,6 +252,7 @@ open class BaseApplicationModule {
             windNotificationDao,
             unblockWgDao,
             excludedIpDomainDao,
+            accountDao,
         )
 
     @Provides
