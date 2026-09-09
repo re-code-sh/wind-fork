@@ -1,6 +1,6 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
-extra["AppName"] = "Windscribe"
-extra["AppId"] = "com.windscribe.vpn"
+extra["AppName"] = "mulitcribe"
+extra["AppId"] = "com.mulitcribe.vpn"
 extra["appMinSdk"] = 24
 extra["appTargetSdk"] = 36
 extra["appCompiledSdk"] = 36

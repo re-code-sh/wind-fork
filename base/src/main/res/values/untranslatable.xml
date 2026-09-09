@@ -3,7 +3,7 @@
   -->
 
 <resources>
-    <string name="app_name" translatable="false">Windscribe</string>
+    <string name="app_name" translatable="false">mulitcribe</string>
     <string name="force_expand" translatable="false">forceExpand</string>
     <!-- Open VPN-->
     <string name="unknown_state" translatable="false">Unknown state</string>

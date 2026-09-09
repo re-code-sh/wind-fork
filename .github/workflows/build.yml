@@ -1,0 +1,211 @@
+name: Build & Release MulitScribe APKs
+
+on:
+  push:
+    branches: [main, master, develop, 'feat/*']
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      build_variant:
+        description: 'Build variant to assemble'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - 'release'
+          - 'debug'
+          - 'all'
+      create_release:
+        description: 'Publish as GitHub Release (if running on a branch/tag)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  NDK_VERSION: '27.2.12479018'
+  CMAKE_VERSION: '3.22.1'
+  GO_VERSION: '1.22'
+  EXPECTED_PACKAGE_NAME: 'com.mulitcribe.vpn'
+  EXPECTED_APP_NAME: 'mulitcribe'
+
+jobs:
+  build-apk:
+    name: Build Android APKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Go (required for WireGuard libwg-go)
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Install System Build Dependencies & SWIG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y swig ninja-build libgl1-mesa-dev
+
+      - name: Setup Android NDK & CMake
+        run: |
+          echo "Installing NDK ${{ env.NDK_VERSION }} and CMake ${{ env.CMAKE_VERSION }}..."
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;${{ env.NDK_VERSION }}" "cmake;${{ env.CMAKE_VERSION }}"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Configure Signing Credentials
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p config
+          KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using repository release keystore secret..."
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+            STORE_PASS="$KEYSTORE_PASSWORD"
+            ALIAS="$KEY_ALIAS"
+            KEY_PASS="$KEY_PASSWORD"
+          else
+            echo "No release keystore secret found; generating self-signed build keystore..."
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_PATH" \
+              -alias "mulitcribe" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "mulitcribe123" \
+              -keypass "mulitcribe123" \
+              -dname "CN=MulitScribe, OU=Mobile, O=MulitScribe, C=US"
+            STORE_PASS="mulitcribe123"
+            ALIAS="mulitcribe"
+            KEY_PASS="mulitcribe123"
+          fi
+
+          cat <<EOF > config/sign.properties
+          SIGN_KEY_FILE=$KEYSTORE_PATH
+          SIGN_STORE_PASSWORD=$STORE_PASS
+          SIGN_KEY_ALIAS=$ALIAS
+          SIGN_KEY_PASSWORD=$KEY_PASS
+          EOF
+
+      - name: Build APKs
+        env:
+          BUILD_VARIANT: ${{ github.event.inputs.build_variant || 'release' }}
+        run: |
+          chmod +x ./gradlew
+          case "$BUILD_VARIANT" in
+            "debug")
+              ./gradlew :mobile:assembleGoogleDebug --no-daemon --stacktrace
+              ;;
+            "all")
+              ./gradlew :mobile:assembleGoogleRelease :mobile:assembleFdroidRelease :mobile:assembleGoogleDebug --no-daemon --stacktrace
+              ;;
+            *)
+              ./gradlew :mobile:assembleGoogleRelease :mobile:assembleFdroidRelease --no-daemon --stacktrace
+              ;;
+          esac
+
+      - name: Collect & Package Outputs
+        run: |
+          mkdir -p dist
+          REF_NAME="${GITHUB_REF_NAME:-latest}"
+
+          find mobile/build/outputs/apk -name "*.apk" | while read -r apk_path; do
+            filename=$(basename "$apk_path")
+            echo "Found output: $apk_path"
+            cp "$apk_path" "dist/${filename}"
+          done
+
+          echo "APKs collected in dist/:"
+          ls -lh dist/
+
+      - name: Verify APK Integrity, Manifest & Signatures
+        run: |
+          set -euo pipefail
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          echo "Using Android build-tools: $BT"
+          fail=0
+
+          for apk in dist/*.apk; do
+            echo "::group::Verifying $apk"
+
+            # 1. Structural integrity (valid ZIP file)
+            unzip -t "$apk" > /dev/null || { echo "❌ CORRUPT ZIP: $apk"; fail=1; }
+
+            # 2. Manifest badging inspection
+            badging="$("$BT/aapt" dump badging "$apk")"
+            echo "$badging" | grep -E "^package:|^sdkVersion:|^targetSdkVersion:|^application-label:" || true
+
+            # Verify package name is com.mulitcribe.vpn
+            if ! echo "$badging" | grep -q "name='${{ env.EXPECTED_PACKAGE_NAME }}'"; then
+              echo "❌ Unexpected package name in $apk. Expected ${{ env.EXPECTED_PACKAGE_NAME }}"
+              fail=1
+            else
+              echo "✅ Package name correctly matches ${{ env.EXPECTED_PACKAGE_NAME }}"
+            fi
+
+            # 3. Signature verification
+            "$BT/apksigner" verify --verbose --print-certs "$apk" > sig.txt || {
+              echo "❌ Signature verification failed for $apk"
+              fail=1
+            }
+            grep -E "Verified using v(1|2|3) scheme|Signer #1 certificate DN" sig.txt || true
+
+            echo "::endgroup::"
+          done
+
+          [ "$fail" -eq 0 ] || { echo "❌ APK verification failed."; exit 1; }
+          echo "✅ All APKs passed integrity, manifest and signature checks."
+
+      - name: Generate SHA256 Checksums
+        run: |
+          cd dist
+          for apk in *.apk; do
+            sha256sum "$apk" > "$apk.sha256"
+          done
+          sha256sum *.apk > sha256sums.txt
+          echo "Generated checksums:"
+          cat sha256sums.txt
+
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mulitcribe-apks
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'MulitScribe ${{ github.ref_name }}'
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: dist/*
+          generate_release_notes: true
