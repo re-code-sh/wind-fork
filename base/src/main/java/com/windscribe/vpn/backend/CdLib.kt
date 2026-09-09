@@ -10,12 +10,18 @@ class CdLib(
     @Volatile
     private var isLoaded = false
 
+    @Volatile
     private var _virtualProfile: VirtualDeviceProfile? = null
     val virtualProfile: VirtualDeviceProfile?
         get() = _virtualProfile
 
+    @Volatile
     var virtualCuid: String? = null
+
+    @Volatile
     var virtualHostName: String? = null
+
+    @Volatile
     var virtualMacAddress: String? = null
 
     init {

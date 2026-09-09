@@ -1,5 +1,6 @@
 package com.windscribe.vpn.backend
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
@@ -9,6 +10,11 @@ import java.util.UUID
 
 class VirtualDeviceManagerTest {
     private val manager = VirtualDeviceManager()
+
+    @After
+    fun tearDown() {
+        CdLib.activeProfile = null
+    }
 
     @Test
     fun `generateNewProfile produces valid UUID for CUID`() {
