@@ -56,6 +56,24 @@ class AccountVaultRepositoryTest {
         allAccountsFlow = MutableStateFlow(emptyList())
 
         every { accountDao.getAllAccounts() } returns allAccountsFlow
+        coEvery { accountDao.setActiveAccount(any()) } answers {
+            val id = firstArg<Long>()
+            val current = allAccountsFlow.value
+            val existing =
+                current.find { it.id == id }
+                    ?: kotlinx.coroutines.runBlocking { accountDao.getAccountById(id) }
+            if (existing != null) {
+                allAccountsFlow.value =
+                    current.filter { it.id != id }.map { it.copy(isActive = false) } + existing.copy(isActive = true)
+            }
+        }
+        coEvery { accountDao.clearAllActiveAccounts() } answers {
+            allAccountsFlow.value = allAccountsFlow.value.map { it.copy(isActive = false) }
+        }
+        coEvery { accountDao.deleteAccountById(any()) } answers {
+            val id = firstArg<Long>()
+            allAccountsFlow.value = allAccountsFlow.value.filter { it.id != id }
+        }
     }
 
     @After
@@ -170,6 +188,7 @@ class AccountVaultRepositoryTest {
             assertEquals("hash_alice", saved.sessionAuthHash)
             assertEquals(8_000_000_000L, saved.dataLeft)
             assertTrue(saved.isPro)
+            assertFalse(saved.isActive)
             assertTrue(saved.virtualCuid.isNotBlank())
             assertTrue(saved.virtualMac.isNotBlank())
             assertTrue(saved.virtualHostName.isNotBlank())
@@ -330,6 +349,10 @@ class AccountVaultRepositoryTest {
             coVerify { accountDao.clearAllActiveAccounts() }
             verify { preferencesHelper.sessionHash = null }
             verify { preferencesHelper.getSession = null }
+            verify { preferencesHelper.userName = "" }
+            verify { preferencesHelper.userStatus = 0 }
+            assertNull(cdLib.virtualProfile)
+            assertEquals("", cdLib.getCuid())
             verify { userRepository.reload() }
             assertNull(repository.activeAccount.value)
             cleanup()

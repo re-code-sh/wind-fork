@@ -42,9 +42,7 @@ class AccountVaultRepositoryImpl
         init {
             scope.launch {
                 accountDao.getAllAccounts().collect { accounts ->
-                    if (accounts.isNotEmpty()) {
-                        _activeAccount.value = accounts.firstOrNull { it.isActive }
-                    }
+                    _activeAccount.value = accounts.firstOrNull { it.isActive }
                 }
             }
         }
@@ -96,7 +94,7 @@ class AccountVaultRepositoryImpl
                     trafficMax = trafficMax,
                     trafficUsed = trafficUsed,
                     isPro = isPro,
-                    isActive = true,
+                    isActive = false,
                     virtualCuid = profile.cuid,
                     virtualMac = profile.macAddress,
                     virtualHostName = profile.hostName,
@@ -148,6 +146,9 @@ class AccountVaultRepositoryImpl
                     _activeAccount.value = null
                     preferencesHelper.sessionHash = null
                     preferencesHelper.getSession = null
+                    preferencesHelper.userName = ""
+                    preferencesHelper.userStatus = 0
+                    cdLib.clearVirtualProfile()
                     userRepository.reload()
                 }
             }

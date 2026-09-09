@@ -77,23 +77,28 @@ class UserRepository(
         // No explicit Dispatchers.IO — applicationScope already runs on IO in production,
         // and tests need the scope's dispatcher so advanceUntilIdle drains the launch.
         scope.launch {
-            response?.let {
-                preferenceHelper.getSession = Gson().toJson(it)
-                val newUser = User(it)
+            if (response != null) {
+                preferenceHelper.getSession = Gson().toJson(response)
+                val newUser = User(response)
                 _user.value = newUser
                 preferenceHelper.userStatus = if (newUser.isPro) 1 else 0
                 preferenceHelper.userName = newUser.userName
                 // Amnezia auto-enable logic
-                handleAmneziaAutoEnable(it)
+                handleAmneziaAutoEnable(response)
                 callback?.invoke(newUser)
-            } ?: kotlin.run {
-                try {
-                    val cachedSessionResponse = preferenceHelper.getSession
-                    val userSession =
-                        Gson().fromJson(cachedSessionResponse, UserSessionResponse::class.java)
-                    _user.value = User(userSession)
-                } catch (_: Exception) {
-                    logger.info("No user is logged in.")
+            } else {
+                val cachedSessionResponse = preferenceHelper.getSession
+                if (cachedSessionResponse == null) {
+                    _user.value = null
+                } else {
+                    try {
+                        val userSession =
+                            Gson().fromJson(cachedSessionResponse, UserSessionResponse::class.java)
+                        _user.value = if (userSession != null) User(userSession) else null
+                    } catch (_: Exception) {
+                        logger.info("No user is logged in.")
+                        _user.value = null
+                    }
                 }
             }
         }
