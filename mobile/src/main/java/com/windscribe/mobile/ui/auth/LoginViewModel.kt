@@ -4,11 +4,13 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
 import com.windscribe.mobile.ui.helper.AccessibilityHelper
 import com.windscribe.vpn.BuildConfig
 import com.windscribe.vpn.api.IApiCallManager
 import com.windscribe.vpn.api.response.AuthToken
 import com.windscribe.vpn.api.response.UserLoginResponse
+import com.windscribe.vpn.api.response.UserSessionResponse
 import com.windscribe.vpn.apppreference.PreferencesHelper
 import com.windscribe.vpn.commonutils.Ext.result
 import com.windscribe.vpn.commonutils.HashUtils
@@ -16,6 +18,7 @@ import com.windscribe.vpn.commonutils.WindUtilities
 import com.windscribe.vpn.constants.NetworkErrorCodes
 import com.windscribe.vpn.errormodel.SessionErrorHandler
 import com.windscribe.vpn.exceptions.ApiFailure
+import com.windscribe.vpn.repository.AccountVaultRepository
 import com.windscribe.vpn.repository.CallResult
 import com.windscribe.vpn.repository.UserDataState
 import com.windscribe.vpn.repository.UserRepository
@@ -64,6 +67,7 @@ class LoginViewModel
         private val preferenceHelper: PreferencesHelper,
         private val firebaseManager: FirebaseManager,
         private val userRepository: UserRepository,
+        private val accountVaultRepository: AccountVaultRepository,
     ) : ViewModel() {
         private var captchaRefreshJob: Job? = null
         private val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
@@ -385,6 +389,19 @@ class LoginViewModel
                             }
 
                             is UserDataState.Success -> {
+                                val sessionJson = preferenceHelper.getSession
+                                if (sessionJson != null) {
+                                    try {
+                                        val sessionResponse =
+                                            Gson().fromJson(
+                                                sessionJson,
+                                                UserSessionResponse::class.java,
+                                            )
+                                        accountVaultRepository.addOrUpdateAccount(sessionResponse, sessionAuthHash)
+                                    } catch (e: Exception) {
+                                        logger.error("Failed to add account to vault: ${e.message}")
+                                    }
+                                }
                                 updateState(LoginState.Success)
                             }
                         }

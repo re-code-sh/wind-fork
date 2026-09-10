@@ -107,6 +107,64 @@ class AccountVaultRepositoryImpl
             return id
         }
 
+        override suspend fun addOrUpdateAccount(
+            sessionResponse: UserSessionResponse,
+            sessionAuthHash: String,
+        ): Long {
+            val username = sessionResponse.userName ?: preferencesHelper.userName
+            val existing = accountDao.getAccountByUsername(username)
+            val profile =
+                if (existing != null && existing.virtualCuid.isNotBlank()) {
+                    VirtualDeviceProfile(existing.virtualCuid, existing.virtualMac, existing.virtualHostName)
+                } else {
+                    virtualDeviceManager.generateNewProfile(username)
+                }
+
+            val trafficMax = sessionResponse.trafficMax?.toLongOrNull() ?: 0L
+            val trafficUsed = sessionResponse.trafficUsed?.toLongOrNull() ?: 0L
+            val dataLeft = maxOf(0L, trafficMax - trafficUsed)
+            val isPro = sessionResponse.isPremium == 1
+            val finalHash =
+                sessionAuthHash.ifBlank {
+                    existing?.sessionAuthHash ?: preferencesHelper.sessionHash ?: ""
+                }
+            val rawSessionJson = Gson().toJson(sessionResponse)
+
+            val accountEntity =
+                AccountEntity(
+                    id = existing?.id ?: 0L,
+                    username = username,
+                    sessionAuthHash = finalHash,
+                    rawSessionJson = rawSessionJson,
+                    dataLeft = dataLeft,
+                    trafficMax = trafficMax,
+                    trafficUsed = trafficUsed,
+                    isPro = isPro,
+                    isActive = false,
+                    virtualCuid = profile.cuid,
+                    virtualMac = profile.macAddress,
+                    virtualHostName = profile.hostName,
+                    sessionStatus = "VALID",
+                    lastSyncTimestamp = System.currentTimeMillis(),
+                )
+
+            val id = accountDao.insertOrUpdate(accountEntity)
+            switchToAccount(id)
+            return id
+        }
+
+        override suspend fun saveCurrentSessionToVault(): Long? {
+            val currentHash = preferencesHelper.sessionHash ?: return null
+            val currentSessionJson = preferencesHelper.getSession ?: return null
+            val sessionResponse =
+                try {
+                    Gson().fromJson(currentSessionJson, UserSessionResponse::class.java)
+                } catch (_: Exception) {
+                    null
+                } ?: return null
+            return addOrUpdateAccount(sessionResponse, currentHash)
+        }
+
         override suspend fun switchToAccount(accountId: Long): Boolean {
             val account = accountDao.getAccountById(accountId) ?: return false
 

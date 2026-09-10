@@ -669,4 +669,13 @@ last chosen location.</string>
     <string name="force_upgrade_message_with_version">This version of Windscribe is no longer supported. Please update to %s to continue using the app.</string>
     <string name="security_notice">Security Notice</string>
     <string name="encryption_unavailable_warning">Your device does not support encrypted credential storage. Session tokens and VPN keys will be stored with reduced security.\n\nFor maximum security, avoid using this device on untrusted networks or if rooted.</string>
+    <string name="account_vault">Account Vault</string>
+    <string name="active_badge">ACTIVE</string>
+    <string name="switch_account">Switch</string>
+    <string name="remove_account">Remove</string>
+    <string name="add_another_account">Add Another Account</string>
+    <string name="vault_description">Switch between accounts instantly without logging out.</string>
+    <string name="no_other_accounts">No other accounts in vault</string>
+    <string name="remove_account_title">Remove Account</string>
+    <string name="remove_account_confirmation">Are you sure you want to remove %s from the vault?</string>
 </resources>

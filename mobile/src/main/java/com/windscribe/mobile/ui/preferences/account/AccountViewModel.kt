@@ -15,7 +15,9 @@ import com.windscribe.vpn.api.response.WebSession
 import com.windscribe.vpn.commonutils.Ext.result
 import com.windscribe.vpn.commonutils.Ext.toLabel
 import com.windscribe.vpn.constants.NetworkKeyConstants
+import com.windscribe.vpn.localdatabase.tables.AccountEntity
 import com.windscribe.vpn.model.User
+import com.windscribe.vpn.repository.AccountVaultRepository
 import com.windscribe.vpn.repository.CallResult
 import com.windscribe.vpn.repository.UserRepository
 import com.windscribe.vpn.workers.WindScribeWorkManager
@@ -24,8 +26,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -130,6 +134,8 @@ abstract class AccountViewModel : ViewModel() {
     abstract val alertState: StateFlow<AlertState>
     abstract val isGhostAccount: StateFlow<Boolean>
     abstract val isSsoLogin: StateFlow<Boolean>
+    abstract val accountsList: StateFlow<List<AccountEntity>>
+    abstract val activeAccount: StateFlow<AccountEntity?>
     open val goTo: SharedFlow<AccountGoTo> = MutableSharedFlow(replay = 0)
 
     open fun onManageAccountClicked() {}
@@ -145,6 +151,10 @@ abstract class AccountViewModel : ViewModel() {
     open fun onEnterVoucherCode(code: String) {}
 
     open fun onDialogDismiss() {}
+
+    open fun onSwitchAccount(id: Long) {}
+
+    open fun onRemoveAccount(id: Long) {}
 }
 
 @HiltViewModel
@@ -155,6 +165,7 @@ class AccountViewModelImpl
         val api: IApiCallManager,
         val workManager: WindScribeWorkManager,
         val preferencesHelper: com.windscribe.vpn.apppreference.PreferencesHelper,
+        val accountVaultRepository: AccountVaultRepository,
     ) : AccountViewModel() {
         private val _showProgress = MutableStateFlow(false)
         override val showProgress: StateFlow<Boolean> = _showProgress
@@ -168,9 +179,50 @@ class AccountViewModelImpl
         private val _isSsoLogin = MutableStateFlow(false)
         override val isSsoLogin: StateFlow<Boolean> = _isSsoLogin
 
+        override val accountsList: StateFlow<List<AccountEntity>> =
+            accountVaultRepository.allAccounts.stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList(),
+            )
+        override val activeAccount: StateFlow<AccountEntity?> = accountVaultRepository.activeAccount
+
         init {
             loadAccountInfo()
             _isSsoLogin.value = preferencesHelper.isSsoLogin
+            syncCurrentAccountToVault()
+        }
+
+        private fun syncCurrentAccountToVault() {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    accountVaultRepository.saveCurrentSessionToVault()
+                } catch (e: Exception) {
+                    logger.error("Error auto-vaulting current session: ${e.message}")
+                }
+            }
+        }
+
+        override fun onSwitchAccount(id: Long) {
+            viewModelScope.launch {
+                _showProgress.value = true
+                try {
+                    accountVaultRepository.switchToAccount(id)
+                } finally {
+                    _showProgress.value = false
+                }
+            }
+        }
+
+        override fun onRemoveAccount(id: Long) {
+            viewModelScope.launch {
+                _showProgress.value = true
+                try {
+                    accountVaultRepository.removeAccount(id)
+                } finally {
+                    _showProgress.value = false
+                }
+            }
         }
 
         private fun loadAccountInfo() {

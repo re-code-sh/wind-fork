@@ -19,6 +19,13 @@ interface AccountVaultRepository {
         sessionResponse: UserSessionResponse,
     ): Long
 
+    suspend fun addOrUpdateAccount(
+        sessionResponse: UserSessionResponse,
+        sessionAuthHash: String,
+    ): Long
+
+    suspend fun saveCurrentSessionToVault(): Long?
+
     suspend fun switchToAccount(accountId: Long): Boolean
 
     suspend fun removeAccount(accountId: Long)

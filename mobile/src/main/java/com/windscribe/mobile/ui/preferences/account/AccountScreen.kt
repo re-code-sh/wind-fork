@@ -80,6 +80,7 @@ import com.windscribe.mobile.ui.theme.preferencesSubtitleColor
 import com.windscribe.mobile.ui.theme.primaryTextColor
 import com.windscribe.vpn.R
 import com.windscribe.vpn.Windscribe.Companion.appContext
+import com.windscribe.vpn.localdatabase.tables.AccountEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -95,6 +96,9 @@ class AccountActions(
     val onEnterVoucherCode: (String) -> Unit = {},
     val onEnterLazyLoginCode: (String) -> Unit = {},
     val onDialogDismiss: () -> Unit = {},
+    val onSwitchAccount: (Long) -> Unit = {},
+    val onRemoveAccount: (Long) -> Unit = {},
+    val onAddAccountClicked: () -> Unit = {},
 )
 
 /**
@@ -107,11 +111,17 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel<AccountViewModelIm
     val isGhostAccount by viewModel.isGhostAccount.collectAsState()
     val accountState by viewModel.accountState.collectAsState()
     val isSsoLogin by viewModel.isSsoLogin.collectAsState()
+    val accountsList by viewModel.accountsList.collectAsState()
+    val activeAccount by viewModel.activeAccount.collectAsState()
+    val navController = LocalNavController.current
+
     AccountContent(
         showProgress = showProgress,
         isGhostAccount = isGhostAccount,
         accountState = accountState,
         isSsoLogin = isSsoLogin,
+        accountsList = accountsList,
+        activeAccount = activeAccount,
         alertState = viewModel.alertState,
         goTo = viewModel.goTo,
         actions =
@@ -123,6 +133,9 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel<AccountViewModelIm
                 onEnterVoucherCode = viewModel::onEnterVoucherCode,
                 onEnterLazyLoginCode = viewModel::onEnterLazyLoginCode,
                 onDialogDismiss = viewModel::onDialogDismiss,
+                onSwitchAccount = viewModel::onSwitchAccount,
+                onRemoveAccount = viewModel::onRemoveAccount,
+                onAddAccountClicked = { navController.navigate(Screen.Login.route) },
             ),
     )
 }
@@ -137,6 +150,8 @@ fun AccountContent(
     isGhostAccount: Boolean,
     accountState: AccountState,
     isSsoLogin: Boolean,
+    accountsList: List<AccountEntity> = emptyList(),
+    activeAccount: AccountEntity? = null,
     alertState: Flow<AlertState>,
     goTo: Flow<AccountGoTo>,
     actions: AccountActions,
@@ -167,6 +182,14 @@ fun AccountContent(
                         actions.onResetPasswordClicked()
                     }
                 }
+                Spacer(modifier = Modifier.height(14.dp))
+                AccountVaultSection(
+                    accounts = accountsList,
+                    activeAccount = activeAccount,
+                    onSwitch = actions.onSwitchAccount,
+                    onRemove = actions.onRemoveAccount,
+                    onAddAccount = actions.onAddAccountClicked,
+                )
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
                     stringResource(R.string.other),
