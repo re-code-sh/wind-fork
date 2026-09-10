@@ -207,7 +207,20 @@ class AccountViewModelImpl
             viewModelScope.launch {
                 _showProgress.value = true
                 try {
-                    accountVaultRepository.switchToAccount(id)
+                    val success = accountVaultRepository.switchToAccount(id)
+                    if (!success) {
+                        _alertState.emit(
+                            AlertState.Error(
+                                ToastMessage.Raw("Failed to switch account: account not found in vault"),
+                            ),
+                        )
+                    }
+                } catch (e: Exception) {
+                    _alertState.emit(
+                        AlertState.Error(
+                            ToastMessage.Raw(e.message ?: "Failed to switch account"),
+                        ),
+                    )
                 } finally {
                     _showProgress.value = false
                 }
@@ -219,6 +232,12 @@ class AccountViewModelImpl
                 _showProgress.value = true
                 try {
                     accountVaultRepository.removeAccount(id)
+                } catch (e: Exception) {
+                    _alertState.emit(
+                        AlertState.Error(
+                            ToastMessage.Raw(e.message ?: "Failed to remove account"),
+                        ),
+                    )
                 } finally {
                     _showProgress.value = false
                 }

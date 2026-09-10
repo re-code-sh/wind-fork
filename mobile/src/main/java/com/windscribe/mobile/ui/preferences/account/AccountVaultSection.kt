@@ -64,7 +64,7 @@ fun AccountVaultSection(
     modifier: Modifier = Modifier,
 ) {
     var accountPendingRemoval by remember { mutableStateOf<AccountEntity?>(null) }
-    val inactiveAccounts = accounts.filter { it.id != activeAccount?.id }
+    val inactiveAccounts = remember(accounts, activeAccount) { accounts.filter { it.id != activeAccount?.id } }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -102,6 +102,26 @@ fun AccountVaultSection(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
+        } else {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.03f),
+                            shape = RoundedCornerShape(12.dp),
+                        ).padding(vertical = 12.dp, horizontal = 14.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.no_other_accounts),
+                    style =
+                        font14.copy(
+                            color = MaterialTheme.colorScheme.preferencesSubtitleColor,
+                            fontWeight = FontWeight.Normal,
+                        ),
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         // Add Another Account Button

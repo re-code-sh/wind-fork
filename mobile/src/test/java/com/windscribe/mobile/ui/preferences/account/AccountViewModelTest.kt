@@ -184,4 +184,36 @@ class AccountViewModelTest {
             assertEquals(0, viewModel.accountsList.value.size)
             assertNull(viewModel.activeAccount.value)
         }
+
+    @Test
+    fun `onSwitchAccount failure emits error alert`() =
+        runTest(testDispatcher) {
+            coEvery { accountVaultRepository.switchToAccount(999L) } returns false
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            viewModel.onSwitchAccount(999L)
+            advanceUntilIdle()
+
+            val alert = viewModel.alertState.value
+            org.junit.Assert.assertTrue(alert is AlertState.Error)
+            assertEquals(false, viewModel.showProgress.value)
+        }
+
+    @Test
+    fun `onRemoveAccount exception emits error alert`() =
+        runTest(testDispatcher) {
+            coEvery { accountVaultRepository.removeAccount(999L) } throws RuntimeException("DB error")
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            viewModel.onRemoveAccount(999L)
+            advanceUntilIdle()
+
+            val alert = viewModel.alertState.value
+            org.junit.Assert.assertTrue(alert is AlertState.Error)
+            assertEquals(false, viewModel.showProgress.value)
+        }
 }
