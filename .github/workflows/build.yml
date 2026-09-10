@@ -73,6 +73,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          validate-wrappers: false
 
       - name: Configure Signing Credentials
         env:
