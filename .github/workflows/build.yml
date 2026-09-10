@@ -137,8 +137,9 @@ jobs:
           REF_NAME="${GITHUB_REF_NAME:-latest}"
 
           find mobile/build/outputs/apk -name "*.apk" | while read -r apk_path; do
-            filename=$(basename "$apk_path")
-            echo "Found output: $apk_path"
+            orig_filename=$(basename "$apk_path")
+            filename=$(echo "$orig_filename" | sed 's/^mobile-/mulitcribe-/')
+            echo "Found output: $apk_path -> dist/${filename}"
             cp "$apk_path" "dist/${filename}"
           done
 
