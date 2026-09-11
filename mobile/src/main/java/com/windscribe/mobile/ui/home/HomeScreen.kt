@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,10 +52,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -742,6 +746,7 @@ private fun Header(
         newsfeedCount = newsfeedCount,
         onMainMenuClick = { homeViewmodel.onMainMenuClick() },
         onNewsfeedClick = { navController.navigate(Screen.Newsfeed.route) },
+        onAccountClick = { navController.navigate(Screen.Account.route) },
     )
 }
 
@@ -752,6 +757,7 @@ private fun HeaderContent(
     newsfeedCount: Int,
     onMainMenuClick: () -> Unit,
     onNewsfeedClick: () -> Unit,
+    onAccountClick: () -> Unit,
 ) {
     val leftHeaderAsset =
         if (connectionUIState is ConnectionUIState.Connected) {
@@ -849,6 +855,12 @@ private fun HeaderContent(
                     contentScale = ContentScale.FillHeight,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
+            } else if (userState is UserState.Free) {
+                Spacer(modifier = Modifier.width(12.dp))
+                HeaderDataGauge(
+                    freeState = userState,
+                    onClick = onAccountClick,
+                )
             }
             if (newsfeedCount > 0) {
                 Box(
@@ -874,6 +886,74 @@ private fun HeaderContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HeaderDataGauge(
+    freeState: UserState.Free,
+    onClick: () -> Unit,
+) {
+    val angle = freeState.dataLeftAngle
+    val textColor =
+        if (angle <= 0) {
+            AppColors.red
+        } else if (angle > 0 && angle <= 36) {
+            Color.Yellow
+        } else {
+            AppColors.neonGreen
+        }
+    val gaugeColor =
+        if (angle <= 0) {
+            AppColors.red
+        } else if (angle > 0 && angle <= 36) {
+            Color.Yellow
+        } else {
+            AppColors.neonGreen
+        }
+
+    Box(
+        modifier =
+            Modifier
+                .size(32.dp)
+                .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(
+            modifier = Modifier.size(32.dp),
+        ) {
+            val strokeWidth = 2.5.dp.toPx()
+
+            drawArc(
+                color = AppColors.white.copy(alpha = 0.20f),
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                size = Size(size.width, size.height),
+                topLeft = Offset.Zero,
+            )
+
+            if (angle > 0f) {
+                drawArc(
+                    color = gaugeColor,
+                    startAngle = -90f,
+                    sweepAngle = angle,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    size = Size(size.width, size.height),
+                    topLeft = Offset.Zero,
+                )
+            }
+        }
+        Text(
+            text = freeState.dataLeft,
+            style = font9.copy(fontSize = 7.5.sp),
+            lineHeight = 7.5.sp,
+            textAlign = TextAlign.Center,
+            color = textColor,
+            modifier = Modifier.align(Alignment.Center),
+        )
     }
 }
 

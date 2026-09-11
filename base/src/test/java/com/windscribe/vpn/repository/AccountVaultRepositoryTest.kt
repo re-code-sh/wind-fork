@@ -16,6 +16,7 @@ import com.windscribe.vpn.backend.VirtualDeviceManager
 import com.windscribe.vpn.backend.utils.WindVpnController
 import com.windscribe.vpn.localdatabase.AccountDao
 import com.windscribe.vpn.localdatabase.tables.AccountEntity
+import com.windscribe.vpn.model.User
 import com.windscribe.vpn.state.VPNConnectionStateManager
 import com.windscribe.vpn.workers.WindScribeWorkManager
 import dagger.Lazy
@@ -51,6 +52,7 @@ class AccountVaultRepositoryTest {
     private lateinit var vpnConnectionStateManager: VPNConnectionStateManager
     private lateinit var vpnController: WindVpnController
     private lateinit var allAccountsFlow: MutableStateFlow<List<AccountEntity>>
+    private lateinit var userFlow: MutableStateFlow<User?>
 
     @Before
     fun setUp() {
@@ -64,7 +66,9 @@ class AccountVaultRepositoryTest {
         virtualDeviceManager = VirtualDeviceManager()
         cdLib = CdLib()
         allAccountsFlow = MutableStateFlow(emptyList())
+        userFlow = MutableStateFlow(null)
 
+        every { userRepository.user } returns userFlow
         every { vpnConnectionStateManager.isVPNActive() } returns false
         every { accountDao.getAllAccounts() } returns allAccountsFlow
         coEvery { accountDao.setActiveAccount(any()) } answers {
@@ -564,6 +568,125 @@ class AccountVaultRepositoryTest {
             assertEquals(15L, result)
             coVerify { accountDao.setActiveAccount(15L) }
             verify { userRepository.reload(match { it.userName == "first_user" }) }
+            cleanup()
+        }
+
+    // ==========================================
+    // 7. checkAndAutoSwitch tests
+    // ==========================================
+
+    @Test
+    fun `checkAndAutoSwitch switches to best candidate when active free account has less than 500 MB`() =
+        runTest {
+            val repository = buildRepository()
+            val lowDataActive =
+                createAccountEntity(
+                    id = 1L,
+                    username = "low_data_user",
+                    dataLeft = 300L * 1024L * 1024L,
+                    isPro = false,
+                    isActive = true,
+                )
+            val highDataCandidate =
+                createAccountEntity(
+                    id = 2L,
+                    username = "high_data_user",
+                    dataLeft = 8L * 1024L * 1024L * 1024L,
+                    isPro = false,
+                    isActive = false,
+                )
+
+            allAccountsFlow.value = listOf(lowDataActive, highDataCandidate)
+            coEvery { accountDao.getActiveAccount() } returns lowDataActive
+            coEvery { accountDao.getAccountById(1L) } returns lowDataActive
+            coEvery { accountDao.getAccountById(2L) } returns highDataCandidate
+            coEvery {
+                accountDao.getAccountsWithDataAbove(AccountVaultRepository.AUTO_SWITCH_THRESHOLD_BYTES)
+            } returns listOf(highDataCandidate)
+
+            val switched = repository.checkAndAutoSwitch()
+            advanceUntilIdle()
+
+            assertTrue(switched)
+            coVerify(exactly = 1) { accountDao.setActiveAccount(2L) }
+            cleanup()
+        }
+
+    @Test
+    fun `checkAndAutoSwitch does not switch when active account has data above threshold`() =
+        runTest {
+            val repository = buildRepository()
+            val goodActive =
+                createAccountEntity(
+                    id = 1L,
+                    username = "good_user",
+                    dataLeft = 600L * 1024L * 1024L,
+                    isPro = false,
+                    isActive = true,
+                )
+
+            allAccountsFlow.value = listOf(goodActive)
+            coEvery { accountDao.getActiveAccount() } returns goodActive
+            coEvery { accountDao.getAccountById(1L) } returns goodActive
+
+            val switched = repository.checkAndAutoSwitch()
+            advanceUntilIdle()
+
+            assertFalse(switched)
+            coVerify(exactly = 0) { accountDao.setActiveAccount(any()) }
+            cleanup()
+        }
+
+    @Test
+    fun `checkAndAutoSwitch does not switch when active account is Pro`() =
+        runTest {
+            val repository = buildRepository()
+            val proActive =
+                createAccountEntity(
+                    id = 1L,
+                    username = "pro_user",
+                    dataLeft = 100L * 1024L * 1024L,
+                    isPro = true,
+                    isActive = true,
+                )
+
+            allAccountsFlow.value = listOf(proActive)
+            coEvery { accountDao.getActiveAccount() } returns proActive
+            coEvery { accountDao.getAccountById(1L) } returns proActive
+
+            val switched = repository.checkAndAutoSwitch()
+            advanceUntilIdle()
+
+            assertFalse(switched)
+            coVerify(exactly = 0) { accountDao.setActiveAccount(any()) }
+            cleanup()
+        }
+
+    @Test
+    fun `checkAndAutoSwitch does not switch when no candidate account has at least 500 MB`() =
+        runTest {
+            val repository = buildRepository()
+            val lowActive =
+                createAccountEntity(
+                    id = 1L,
+                    username = "low_active",
+                    dataLeft = 100L * 1024L * 1024L,
+                    isPro = false,
+                    isActive = true,
+                )
+
+            allAccountsFlow.value = listOf(lowActive)
+            coEvery { accountDao.getActiveAccount() } returns lowActive
+            coEvery { accountDao.getAccountById(1L) } returns lowActive
+            coEvery {
+                accountDao.getAccountsWithDataAbove(AccountVaultRepository.AUTO_SWITCH_THRESHOLD_BYTES)
+            } returns emptyList()
+
+            val switched = repository.checkAndAutoSwitch()
+            advanceUntilIdle()
+
+            assertFalse(switched)
+            coVerify(exactly = 0) { accountDao.setActiveAccount(any()) }
             cleanup()
         }
 }

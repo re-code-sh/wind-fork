@@ -274,21 +274,31 @@ class ServerViewModelImpl
             )
         }
 
-        private fun List<Datacenter>.sortCities(): List<Datacenter> =
+        internal fun List<Datacenter>.sortCities(): List<Datacenter> =
             when (preferencesHelper.selection) {
                 LATENCY_LIST_SELECTION_MODE -> {
                     val state = latencyListState.value as? ListState.Success<LatencyListItem>
                     if (state != null) {
-                        sortedBy { city ->
-                            state.data.firstOrNull { it.id == city.id }?.time
-                        }
+                        sortedWith(
+                            compareBy<Datacenter> { it.pro }
+                                .thenBy { city ->
+                                    val time = state.data.firstOrNull { it.id == city.id }?.time
+                                    if (time != null && time > 0) time else Int.MAX_VALUE
+                                }.thenBy { it.nodeName },
+                        )
                     } else {
-                        sortedBy { it.nodeName }
+                        sortedWith(
+                            compareBy<Datacenter> { it.pro }
+                                .thenBy { it.nodeName },
+                        )
                     }
                 }
 
                 else -> {
-                    sortedBy { it.nodeName }
+                    sortedWith(
+                        compareBy<Datacenter> { it.pro }
+                            .thenBy { it.nodeName },
+                    )
                 }
             }
 
@@ -318,33 +328,56 @@ class ServerViewModelImpl
                 }
             }
 
-        private fun List<ServerListItem>.sortRegions(): List<ServerListItem> =
+        internal fun List<ServerListItem>.sortRegions(): List<ServerListItem> =
             when (preferencesHelper.selection) {
                 LATENCY_LIST_SELECTION_MODE -> {
                     val state = latencyListState.value as? ListState.Success<LatencyListItem>
                     if (state != null) {
                         val latencyMap = state.data.associateBy { it.id }
-                        sortedBy { item ->
-                            // Find lowest latency across cities in region
-                            val minLatency =
-                                item.datacenters
-                                    .mapNotNull { city ->
-                                        val time = latencyMap[city.id]?.time
-                                        if (time != null && time > 0) time else null
-                                    }.minOrNull()
-                            minLatency ?: Int.MAX_VALUE
-                        }
+                        sortedWith(
+                            compareBy<ServerListItem> { item ->
+                                val hasFree = item.datacenters.any { it.pro == 0 }
+                                if (hasFree) 0 else 1
+                            }.thenBy { item ->
+                                val minLatency =
+                                    item.datacenters
+                                        .mapNotNull { city ->
+                                            val time = latencyMap[city.id]?.time
+                                            if (time != null && time > 0) time else null
+                                        }.minOrNull()
+                                minLatency ?: Int.MAX_VALUE
+                            }.thenBy { it.region.name.orEmpty() },
+                        )
                     } else {
-                        this
+                        sortedWith(
+                            compareBy<ServerListItem> { item ->
+                                val hasFree = item.datacenters.any { it.pro == 0 }
+                                if (hasFree) 0 else 1
+                            }.thenBy { it.region.sortOrder }
+                                .thenBy { it.region.name.orEmpty() }
+                                .thenBy { it.id },
+                        )
                     }
                 }
 
                 AZ_LIST_SELECTION_MODE -> {
-                    sortedBy { it.region.name }
+                    sortedWith(
+                        compareBy<ServerListItem> { item ->
+                            val hasFree = item.datacenters.any { it.pro == 0 }
+                            if (hasFree) 0 else 1
+                        }.thenBy { it.region.name.orEmpty() },
+                    )
                 }
 
                 else -> {
-                    this
+                    sortedWith(
+                        compareBy<ServerListItem> { item ->
+                            val hasFree = item.datacenters.any { it.pro == 0 }
+                            if (hasFree) 0 else 1
+                        }.thenBy { it.region.sortOrder }
+                            .thenBy { it.region.name.orEmpty() }
+                            .thenBy { it.id },
+                    )
                 }
             }
 

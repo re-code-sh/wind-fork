@@ -15,6 +15,7 @@ import com.windscribe.vpn.backend.VirtualDeviceProfile
 import com.windscribe.vpn.backend.utils.WindVpnController
 import com.windscribe.vpn.localdatabase.AccountDao
 import com.windscribe.vpn.localdatabase.tables.AccountEntity
+import com.windscribe.vpn.model.User
 import com.windscribe.vpn.state.VPNConnectionStateManager
 import com.windscribe.vpn.workers.WindScribeWorkManager
 import dagger.Lazy
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import javax.inject.Inject
@@ -47,11 +49,20 @@ class AccountVaultRepositoryImpl
         private val _activeAccount = MutableStateFlow<AccountEntity?>(null)
         override val activeAccount: StateFlow<AccountEntity?> = _activeAccount.asStateFlow()
         override val allAccounts: Flow<List<AccountEntity>> = accountDao.getAllAccounts()
+        private var isAutoSwitching = false
+        private var lastAutoSwitchTimestamp = 0L
 
         init {
             scope.launch {
                 accountDao.getAllAccounts().collect { accounts ->
                     _activeAccount.value = accounts.firstOrNull { it.isActive }
+                }
+            }
+
+            scope.launch {
+                userRepository.user.filterNotNull().collect { user ->
+                    syncCurrentTraffic(user)
+                    checkAndAutoSwitch()
                 }
             }
         }
@@ -310,4 +321,68 @@ class AccountVaultRepositoryImpl
             } catch (e: Exception) {
                 Result.failure(e)
             }
+
+        private suspend fun syncCurrentTraffic(user: User) {
+            val active = _activeAccount.value ?: accountDao.getActiveAccount() ?: return
+            if (active.username == user.userName) {
+                val dataUsed = user.dataUsed
+                val dataMax = user.maxData
+                val dataLeft = user.dataLeft
+                if (active.trafficUsed != dataUsed || active.trafficMax != dataMax || active.dataLeft != dataLeft) {
+                    accountDao.updateTraffic(
+                        id = active.id,
+                        dataUsed = dataUsed,
+                        dataMax = dataMax,
+                        dataLeft = dataLeft,
+                    )
+                }
+            }
+        }
+
+        override suspend fun checkAndAutoSwitch(): Boolean {
+            if (isAutoSwitching) return false
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastAutoSwitchTimestamp < 30_000L) {
+                return false
+            }
+
+            val currentActive = _activeAccount.value ?: accountDao.getActiveAccount() ?: return false
+            if (currentActive.isPro) return false
+
+            val currentUser = userRepository.user.value
+            if (currentUser != null && currentUser.userName == currentActive.username) {
+                if (currentUser.isPro) return false
+                if (currentUser.dataLeft >= AccountVaultRepository.AUTO_SWITCH_THRESHOLD_BYTES) {
+                    return false
+                }
+            } else if (currentActive.dataLeft >= AccountVaultRepository.AUTO_SWITCH_THRESHOLD_BYTES) {
+                return false
+            }
+
+            val candidates =
+                accountDao
+                    .getAccountsWithDataAbove(AccountVaultRepository.AUTO_SWITCH_THRESHOLD_BYTES)
+                    .filter { it.id != currentActive.id }
+
+            val bestCandidate = candidates.maxByOrNull { it.dataLeft } ?: return false
+
+            isAutoSwitching = true
+            try {
+                logger.info(
+                    "Auto-switching account: '${currentActive.username}' has low data (${currentActive.dataLeft} bytes). " +
+                        "Switching to '${bestCandidate.username}' (${bestCandidate.dataLeft} bytes).",
+                )
+                val success = switchToAccount(bestCandidate.id)
+                if (success) {
+                    lastAutoSwitchTimestamp = System.currentTimeMillis()
+                }
+                return success
+            } finally {
+                isAutoSwitching = false
+            }
+        }
+
+        internal fun resetAutoSwitchCooldown() {
+            lastAutoSwitchTimestamp = 0L
+        }
     }

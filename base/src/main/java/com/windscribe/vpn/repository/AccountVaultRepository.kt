@@ -31,4 +31,10 @@ interface AccountVaultRepository {
     suspend fun removeAccount(accountId: Long)
 
     suspend fun refreshCurrentAccountTraffic(): Result<UserSessionResponse>
+
+    suspend fun checkAndAutoSwitch(): Boolean
+
+    companion object {
+        const val AUTO_SWITCH_THRESHOLD_BYTES = 500L * 1024L * 1024L // 500 MB
+    }
 }

@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -52,7 +48,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.windscribe.mobile.R
 import com.windscribe.mobile.ui.common.DataCenterFavouriteIcon
 import com.windscribe.mobile.ui.common.DataCenterIcon
@@ -65,13 +60,10 @@ import com.windscribe.mobile.ui.helper.HandleScrollHaptic
 import com.windscribe.mobile.ui.helper.latencyArcStart
 import com.windscribe.mobile.ui.home.HomeViewmodel
 import com.windscribe.mobile.ui.home.UserState
-import com.windscribe.mobile.ui.nav.LocalNavController
-import com.windscribe.mobile.ui.nav.Screen
 import com.windscribe.mobile.ui.theme.AppColors
 import com.windscribe.mobile.ui.theme.expandedServerItemTextColor
 import com.windscribe.mobile.ui.theme.font12
 import com.windscribe.mobile.ui.theme.font16
-import com.windscribe.mobile.ui.theme.font9
 import com.windscribe.mobile.ui.theme.isDark
 import com.windscribe.mobile.ui.theme.serverItemTextColor
 import com.windscribe.mobile.ui.theme.serverListSecondaryColor
@@ -148,113 +140,6 @@ fun AllServerList(
                             }
                         }
                     }
-                    UpgradeBar(homeViewmodel)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun UpgradeBar(viewModel: HomeViewmodel) {
-    val navController = LocalNavController.current
-    val userState by viewModel.userState.collectAsState()
-    val hapticFeedbackEnabled by viewModel.hapticFeedbackEnabled.collectAsState()
-    val haptic = LocalHapticFeedback.current
-    if (userState is UserState.Free) {
-        val angle = (userState as UserState.Free).dataLeftAngle
-        val textColor =
-            if (angle <= 0) {
-                AppColors.red
-            } else if (angle > 0 && angle <= 36) {
-                Color.Yellow
-            } else {
-                AppColors.neonGreen
-            }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp, start = 16.dp, end = 16.dp),
-        ) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .background(color = AppColors.midnightNavy, shape = RoundedCornerShape(8.dp))
-                        .clickable {
-                            if (hapticFeedbackEnabled) haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            navController.navigate(Screen.Upgrade.route)
-                        }.border(
-                            width = 1.dp,
-                            color = AppColors.white.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(8.dp),
-                        ).padding(12.dp),
-            ) {
-                Row {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(40.dp),
-                    ) {
-                        Canvas(
-                            modifier =
-                                Modifier
-                                    .size(40.dp),
-                        ) {
-                            val strokeWidth = 3.dp.toPx()
-
-                            drawArc(
-                                color = if (angle > 0 && angle <= 36) Color.Yellow else AppColors.neonGreen,
-                                startAngle = 160f,
-                                sweepAngle = angle,
-                                useCenter = false,
-                                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
-                                size = Size(size.width, size.height),
-                                topLeft = Offset.Zero,
-                            )
-
-                            drawArc(
-                                color = AppColors.white.copy(alpha = 0.20f),
-                                startAngle = 160f + angle,
-                                sweepAngle = 360f - angle,
-                                useCenter = false,
-                                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
-                                size = Size(size.width, size.height),
-                                topLeft = Offset.Zero,
-                            )
-                        }
-                        Text(
-                            (userState as UserState.Free).dataLeft,
-                            style = font9,
-                            lineHeight = 9.sp,
-                            textAlign = TextAlign.Center,
-                            color = textColor,
-                            modifier = Modifier.align(Alignment.Center),
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            stringResource(com.windscribe.vpn.R.string.unblock_full_access),
-                            style = font16.copy(fontSize = 15.sp),
-                            color = AppColors.white,
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(
-                            stringResource(com.windscribe.vpn.R.string.go_pro_for_unlimited_everything),
-                            style = font12,
-                            color = AppColors.cyberBlue.copy(alpha = 0.7f),
-                        )
-                    }
-                    Spacer(modifier = Modifier.weight(1.0f))
-                    Image(
-                        painter = painterResource(R.drawable.arrow_right),
-                        contentDescription = "Upgrade",
-                        modifier =
-                            Modifier
-                                .size(16.dp)
-                                .align(Alignment.CenterVertically),
-                    )
                 }
             }
         }
