@@ -21,13 +21,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,13 +34,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.windscribe.mobile.ui.helper.hapticClickable
 import com.windscribe.mobile.ui.theme.AppColors
 import com.windscribe.mobile.ui.theme.font12
@@ -61,7 +58,6 @@ fun AccountVaultSection(
     onSwitch: (Long) -> Unit,
     onRemove: (Long) -> Unit,
     onAddAccount: () -> Unit,
-    onBulkImport: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var accountPendingRemoval by remember { mutableStateOf<AccountEntity?>(null) }
@@ -127,8 +123,6 @@ fun AccountVaultSection(
 
         // Add Another Account Button
         AddAccountButton(onClick = onAddAccount)
-        Spacer(modifier = Modifier.height(8.dp))
-        BulkImportButton(onClick = onBulkImport)
     }
 
     // Removal confirmation dialog
@@ -347,113 +341,52 @@ private fun AddAccountButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun BulkImportButton(onClick: () -> Unit) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.03f),
-                    shape = RoundedCornerShape(12.dp),
-                ).border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(12.dp),
-                ).hapticClickable { onClick() }
-                .padding(vertical = 12.dp, horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.SwapHoriz,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.8f),
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = stringResource(R.string.bulk_import_accounts),
-            style =
-                font14.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.8f),
-                ),
-        )
-    }
-}
-
-@Composable
 private fun RemoveAccountDialog(
     account: AccountEntity,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryTextColor,
-            tonalElevation = 8.dp,
-        ) {
-            Column(
-                modifier =
-                    Modifier
-                        .padding(20.dp)
-                        .fillMaxWidth(),
-            ) {
+    AlertDialog(
+        shape = RoundedCornerShape(16.dp),
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.preferencesBackgroundColor,
+        modifier =
+            Modifier.border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(16.dp),
+            ),
+        title = {
+            Text(
+                text = stringResource(R.string.remove_account_title),
+                style = font16.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primaryTextColor,
+            )
+        },
+        text = {
+            Text(
+                text = stringResource(R.string.remove_account_confirmation, account.username),
+                style = font14.copy(textAlign = TextAlign.Start),
+                color = MaterialTheme.colorScheme.preferencesSubtitleColor,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
                 Text(
-                    text = stringResource(R.string.remove_account_title),
-                    style =
-                        font16.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.preferencesBackgroundColor,
-                        ),
+                    text = stringResource(R.string.remove_account),
+                    style = font16.copy(fontWeight = FontWeight.Medium),
+                    color = AppColors.red,
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.remove_account_confirmation, account.username),
-                    style =
-                        font14.copy(
-                            color = MaterialTheme.colorScheme.preferencesBackgroundColor.copy(alpha = 0.8f),
-                            textAlign = TextAlign.Start,
-                        ),
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    Button(
-                        onClick = onDismiss,
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = MaterialTheme.colorScheme.preferencesBackgroundColor,
-                            ),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cancel),
-                            style = font14,
-                            color = MaterialTheme.colorScheme.preferencesBackgroundColor.copy(alpha = 0.7f),
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onConfirm,
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = AppColors.red,
-                                contentColor = Color.White,
-                            ),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.remove_account),
-                            style = font14.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color.White,
-                        )
-                    }
-                }
             }
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(R.string.cancel),
+                    style = font16,
+                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.7f),
+                )
+            }
+        },
+    )
 }

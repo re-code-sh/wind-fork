@@ -678,12 +678,4 @@ last chosen location.</string>
     <string name="no_other_accounts">No other accounts in vault</string>
     <string name="remove_account_title">Remove Account</string>
     <string name="remove_account_confirmation">Are you sure you want to remove %s from the vault?</string>
-    <string name="bulk_import_accounts">Bulk Import Accounts</string>
-    <string name="bulk_import_description">Import multiple accounts at once. Enter one account per line in username:password format.</string>
-    <string name="bulk_import_placeholder">username1:password123\nusername2:password456</string>
-    <string name="bulk_import_anti_abuse_notice">Anti-Abuse Protection: Accounts are imported sequentially with randomized 3-5s delays and per-account virtual hardware spoofing to prevent rate limits.</string>
-    <string name="bulk_import_start">Start Import</string>
-    <string name="bulk_import_in_progress">Importing accounts (%1$d of %2$d)...</string>
-    <string name="bulk_import_completed">Import Completed</string>
-    <string name="bulk_import_summary">%1$d succeeded, %2$d failed</string>
 </resources>

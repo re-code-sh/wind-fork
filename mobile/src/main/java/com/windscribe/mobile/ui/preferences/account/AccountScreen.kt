@@ -99,7 +99,6 @@ class AccountActions(
     val onSwitchAccount: (Long) -> Unit = {},
     val onRemoveAccount: (Long) -> Unit = {},
     val onAddAccountClicked: () -> Unit = {},
-    val onBulkImportClicked: () -> Unit = {},
 )
 
 /**
@@ -114,8 +113,6 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel<AccountViewModelIm
     val isSsoLogin by viewModel.isSsoLogin.collectAsState()
     val accountsList by viewModel.accountsList.collectAsState()
     val activeAccount by viewModel.activeAccount.collectAsState()
-    val showBulkImportDialog by viewModel.showBulkImportDialog.collectAsState()
-    val bulkImportState by viewModel.bulkImportState.collectAsState()
     val navController = LocalNavController.current
 
     AccountContent(
@@ -127,11 +124,6 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel<AccountViewModelIm
         activeAccount = activeAccount,
         alertState = viewModel.alertState,
         goTo = viewModel.goTo,
-        showBulkImportDialog = showBulkImportDialog,
-        bulkImportState = bulkImportState,
-        onStartBulkImport = viewModel::onStartBulkImport,
-        onCancelBulkImport = viewModel::onCancelBulkImport,
-        onDismissBulkImport = viewModel::onDismissBulkImport,
         actions =
             AccountActions(
                 onManageAccountClicked = viewModel::onManageAccountClicked,
@@ -144,7 +136,6 @@ fun AccountScreen(viewModel: AccountViewModel = hiltViewModel<AccountViewModelIm
                 onSwitchAccount = viewModel::onSwitchAccount,
                 onRemoveAccount = viewModel::onRemoveAccount,
                 onAddAccountClicked = { navController.navigate(Screen.Login.route) },
-                onBulkImportClicked = viewModel::onOpenBulkImport,
             ),
     )
 }
@@ -163,11 +154,6 @@ fun AccountContent(
     activeAccount: AccountEntity? = null,
     alertState: Flow<AlertState>,
     goTo: Flow<AccountGoTo>,
-    showBulkImportDialog: Boolean = false,
-    bulkImportState: BulkImportProgressState? = null,
-    onStartBulkImport: (String) -> Unit = {},
-    onCancelBulkImport: () -> Unit = {},
-    onDismissBulkImport: () -> Unit = {},
     actions: AccountActions,
 ) {
     val navController = LocalNavController.current
@@ -203,7 +189,6 @@ fun AccountContent(
                     onSwitch = actions.onSwitchAccount,
                     onRemove = actions.onRemoveAccount,
                     onAddAccount = actions.onAddAccountClicked,
-                    onBulkImport = actions.onBulkImportClicked,
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
@@ -223,15 +208,6 @@ fun AccountContent(
         PreferenceProgressBar(showProgressBar = showProgress)
         HandleGoto(goTo)
         HandleAlertState(alertState, actions)
-
-        if (showBulkImportDialog) {
-            BulkImportDialog(
-                state = bulkImportState,
-                onStartImport = onStartBulkImport,
-                onCancelImport = onCancelBulkImport,
-                onDismiss = onDismissBulkImport,
-            )
-        }
     }
 }
 

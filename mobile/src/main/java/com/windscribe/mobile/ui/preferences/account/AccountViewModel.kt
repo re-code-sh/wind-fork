@@ -18,7 +18,6 @@ import com.windscribe.vpn.constants.NetworkKeyConstants
 import com.windscribe.vpn.localdatabase.tables.AccountEntity
 import com.windscribe.vpn.model.User
 import com.windscribe.vpn.repository.AccountVaultRepository
-import com.windscribe.vpn.repository.BulkImportStatus
 import com.windscribe.vpn.repository.CallResult
 import com.windscribe.vpn.repository.UserRepository
 import com.windscribe.vpn.workers.WindScribeWorkManager
@@ -129,18 +128,6 @@ sealed class AlertState {
     object VoucherCode : AlertState()
 }
 
-data class BulkImportProgressState(
-    val current: Int = 0,
-    val total: Int = 0,
-    val currentUsername: String = "",
-    val successCount: Int = 0,
-    val failedCount: Int = 0,
-    val isRunning: Boolean = false,
-    val isCompleted: Boolean = false,
-    val statusMessage: String = "",
-    val failures: List<Pair<String, String>> = emptyList(),
-)
-
 abstract class AccountViewModel : ViewModel() {
     abstract val showProgress: StateFlow<Boolean>
     abstract val accountState: StateFlow<AccountState>
@@ -149,8 +136,6 @@ abstract class AccountViewModel : ViewModel() {
     abstract val isSsoLogin: StateFlow<Boolean>
     abstract val accountsList: StateFlow<List<AccountEntity>>
     abstract val activeAccount: StateFlow<AccountEntity?>
-    abstract val showBulkImportDialog: StateFlow<Boolean>
-    abstract val bulkImportState: StateFlow<BulkImportProgressState?>
     open val goTo: SharedFlow<AccountGoTo> = MutableSharedFlow(replay = 0)
 
     open fun onManageAccountClicked() {}
@@ -170,14 +155,6 @@ abstract class AccountViewModel : ViewModel() {
     open fun onSwitchAccount(id: Long) {}
 
     open fun onRemoveAccount(id: Long) {}
-
-    open fun onOpenBulkImport() {}
-
-    open fun onDismissBulkImport() {}
-
-    open fun onStartBulkImport(credentialsText: String) {}
-
-    open fun onCancelBulkImport() {}
 }
 
 @HiltViewModel
@@ -201,11 +178,6 @@ class AccountViewModelImpl
         override val isGhostAccount: StateFlow<Boolean> = _isGhostAccount
         private val _isSsoLogin = MutableStateFlow(false)
         override val isSsoLogin: StateFlow<Boolean> = _isSsoLogin
-        private val _showBulkImportDialog = MutableStateFlow(false)
-        override val showBulkImportDialog: StateFlow<Boolean> = _showBulkImportDialog
-        private val _bulkImportState = MutableStateFlow<BulkImportProgressState?>(null)
-        override val bulkImportState: StateFlow<BulkImportProgressState?> = _bulkImportState
-        private var bulkImportJob: kotlinx.coroutines.Job? = null
 
         override val accountsList: StateFlow<List<AccountEntity>> =
             accountVaultRepository.allAccounts.stateIn(
@@ -270,147 +242,6 @@ class AccountViewModelImpl
                     _showProgress.value = false
                 }
             }
-        }
-
-        override fun onOpenBulkImport() {
-            _bulkImportState.value = null
-            _showBulkImportDialog.value = true
-        }
-
-        override fun onDismissBulkImport() {
-            bulkImportJob?.cancel()
-            bulkImportJob = null
-            _showBulkImportDialog.value = false
-            _bulkImportState.value = null
-        }
-
-        override fun onCancelBulkImport() {
-            bulkImportJob?.cancel()
-            bulkImportJob = null
-            _bulkImportState.value =
-                _bulkImportState.value?.copy(
-                    isRunning = false,
-                    isCompleted = true,
-                    statusMessage = "Import cancelled",
-                )
-        }
-
-        override fun onStartBulkImport(credentialsText: String) {
-            val lines =
-                credentialsText
-                    .lines()
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() && it.contains(":") }
-
-            if (lines.isEmpty()) {
-                _alertState.value =
-                    AlertState.Error(
-                        ToastMessage.Raw("No valid credentials found. Please format as username:password"),
-                    )
-                return
-            }
-
-            val credentials =
-                lines.mapNotNull { line ->
-                    val parts = line.split(":", limit = 2)
-                    if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
-                        Pair(parts[0].trim(), parts[1].trim())
-                    } else {
-                        null
-                    }
-                }
-
-            if (credentials.isEmpty()) {
-                _alertState.value =
-                    AlertState.Error(
-                        ToastMessage.Raw("No valid username:password pairs found"),
-                    )
-                return
-            }
-
-            _bulkImportState.value =
-                BulkImportProgressState(
-                    current = 0,
-                    total = credentials.size,
-                    isRunning = true,
-                    isCompleted = false,
-                    statusMessage = "Starting anti-abuse import...",
-                )
-
-            bulkImportJob?.cancel()
-            bulkImportJob =
-                viewModelScope.launch {
-                    try {
-                        val result =
-                            accountVaultRepository.importAccountsBulk(credentials) { current, totalCount, status ->
-                                val currentUsername =
-                                    when (status) {
-                                        is BulkImportStatus.Starting -> status.username
-                                        is BulkImportStatus.Success -> status.username
-                                        is BulkImportStatus.RateLimited -> status.username
-                                        is BulkImportStatus.Failed -> status.username
-                                    }
-                                val statusMsg =
-                                    when (status) {
-                                        is BulkImportStatus.Starting -> "Authenticating $currentUsername..."
-                                        is BulkImportStatus.Success -> "Added $currentUsername"
-                                        is BulkImportStatus.RateLimited ->
-                                            "Rate limit delay (${status.backoffSeconds}s)..."
-                                        is BulkImportStatus.Failed -> "Failed: ${status.reason}"
-                                    }
-                                val successCount = _bulkImportState.value?.successCount ?: 0
-                                val failedCount = _bulkImportState.value?.failedCount ?: 0
-                                val newSuccess =
-                                    if (status is BulkImportStatus.Success) {
-                                        successCount + 1
-                                    } else {
-                                        successCount
-                                    }
-                                val newFailed =
-                                    if (status is BulkImportStatus.Failed) {
-                                        failedCount + 1
-                                    } else {
-                                        failedCount
-                                    }
-
-                                _bulkImportState.value =
-                                    _bulkImportState.value?.copy(
-                                        current = current,
-                                        total = totalCount,
-                                        currentUsername = currentUsername,
-                                        successCount = newSuccess,
-                                        failedCount = newFailed,
-                                        statusMessage = statusMsg,
-                                    )
-                            }
-
-                        _bulkImportState.value =
-                            _bulkImportState.value?.copy(
-                                isRunning = false,
-                                isCompleted = true,
-                                successCount = result.successCount,
-                                failedCount = result.failedCount,
-                                statusMessage =
-                                    "Completed: ${result.successCount} succeeded, ${result.failedCount} failed",
-                                failures = result.failures,
-                            )
-                    } catch (_: kotlinx.coroutines.CancellationException) {
-                        _bulkImportState.value =
-                            _bulkImportState.value?.copy(
-                                isRunning = false,
-                                isCompleted = true,
-                                statusMessage = "Import cancelled",
-                            )
-                    } catch (e: Exception) {
-                        logger.error("Error during bulk import: ${e.message}")
-                        _bulkImportState.value =
-                            _bulkImportState.value?.copy(
-                                isRunning = false,
-                                isCompleted = true,
-                                statusMessage = "Error: ${e.message}",
-                            )
-                    }
-                }
         }
 
         private fun loadAccountInfo() {
