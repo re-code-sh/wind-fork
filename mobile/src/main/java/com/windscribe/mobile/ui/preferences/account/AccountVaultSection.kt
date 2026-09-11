@@ -61,6 +61,7 @@ fun AccountVaultSection(
     onSwitch: (Long) -> Unit,
     onRemove: (Long) -> Unit,
     onAddAccount: () -> Unit,
+    onBulkImport: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var accountPendingRemoval by remember { mutableStateOf<AccountEntity?>(null) }
@@ -126,6 +127,8 @@ fun AccountVaultSection(
 
         // Add Another Account Button
         AddAccountButton(onClick = onAddAccount)
+        Spacer(modifier = Modifier.height(8.dp))
+        BulkImportButton(onClick = onBulkImport)
     }
 
     // Removal confirmation dialog
@@ -338,6 +341,42 @@ private fun AddAccountButton(onClick: () -> Unit) {
                 font16.copy(
                     fontWeight = FontWeight.Medium,
                     color = AppColors.actionGreen,
+                ),
+        )
+    }
+}
+
+@Composable
+private fun BulkImportButton(onClick: () -> Unit) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.03f),
+                    shape = RoundedCornerShape(12.dp),
+                ).border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                ).hapticClickable { onClick() }
+                .padding(vertical = 12.dp, horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.SwapHoriz,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.8f),
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.bulk_import_accounts),
+            style =
+                font14.copy(
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primaryTextColor.copy(alpha = 0.8f),
                 ),
         )
     }

@@ -464,6 +464,9 @@ open class BaseApplicationModule {
         cdLib: CdLib,
         apiManager: IApiCallManager,
         scope: CoroutineScope,
+        workManager: Lazy<WindScribeWorkManager>,
+        vpnConnectionStateManager: Lazy<VPNConnectionStateManager>,
+        vpnController: Lazy<WindVpnController>,
     ): AccountVaultRepository =
         AccountVaultRepositoryImpl(
             accountDao = accountDao,
@@ -473,6 +476,9 @@ open class BaseApplicationModule {
             cdLib = cdLib,
             apiManager = apiManager,
             scope = scope,
+            workManager = workManager,
+            vpnConnectionStateManager = vpnConnectionStateManager,
+            vpnController = vpnController,
         )
 
     @Provides

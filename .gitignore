@@ -34,3 +34,6 @@ maestro/.env
 
 # Maestro test reports
 /maestro-reports/
+
+# CodeGraph cache
+.codegraph/

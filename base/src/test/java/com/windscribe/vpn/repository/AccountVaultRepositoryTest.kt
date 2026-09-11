@@ -13,8 +13,12 @@ import com.windscribe.vpn.api.response.UserSessionResponse
 import com.windscribe.vpn.apppreference.PreferencesHelper
 import com.windscribe.vpn.backend.CdLib
 import com.windscribe.vpn.backend.VirtualDeviceManager
+import com.windscribe.vpn.backend.utils.WindVpnController
 import com.windscribe.vpn.localdatabase.AccountDao
 import com.windscribe.vpn.localdatabase.tables.AccountEntity
+import com.windscribe.vpn.state.VPNConnectionStateManager
+import com.windscribe.vpn.workers.WindScribeWorkManager
+import dagger.Lazy
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -43,6 +47,9 @@ class AccountVaultRepositoryTest {
     private lateinit var apiManager: IApiCallManager
     private lateinit var virtualDeviceManager: VirtualDeviceManager
     private lateinit var cdLib: CdLib
+    private lateinit var workManager: WindScribeWorkManager
+    private lateinit var vpnConnectionStateManager: VPNConnectionStateManager
+    private lateinit var vpnController: WindVpnController
     private lateinit var allAccountsFlow: MutableStateFlow<List<AccountEntity>>
 
     @Before
@@ -51,10 +58,14 @@ class AccountVaultRepositoryTest {
         preferencesHelper = mockk(relaxed = true)
         userRepository = mockk(relaxed = true)
         apiManager = mockk(relaxed = true)
+        workManager = mockk(relaxed = true)
+        vpnConnectionStateManager = mockk(relaxed = true)
+        vpnController = mockk(relaxed = true)
         virtualDeviceManager = VirtualDeviceManager()
         cdLib = CdLib()
         allAccountsFlow = MutableStateFlow(emptyList())
 
+        every { vpnConnectionStateManager.isVPNActive() } returns false
         every { accountDao.getAllAccounts() } returns allAccountsFlow
         coEvery { accountDao.setActiveAccount(any()) } answers {
             val id = firstArg<Long>()
@@ -90,6 +101,9 @@ class AccountVaultRepositoryTest {
             cdLib = cdLib,
             apiManager = apiManager,
             scope = this,
+            workManager = Lazy { workManager },
+            vpnConnectionStateManager = Lazy { vpnConnectionStateManager },
+            vpnController = Lazy { vpnController },
         )
 
     private fun TestScope.cleanup() = coroutineContext.cancelChildren()
@@ -453,6 +467,137 @@ class AccountVaultRepositoryTest {
 
             assertEquals(2L, repository.activeAccount.value?.id)
             assertEquals("acc2", repository.activeAccount.value?.username)
+            cleanup()
+        }
+
+    // ==========================================
+    // 6. Live sync & Seamless VPN reconnect
+    // ==========================================
+
+    @Test
+    fun `switchToAccount triggers workManager session and credentials update`() =
+        runTest {
+            val repository = buildRepository()
+            val account = createAccountEntity(id = 10L, username = "switch_user")
+            coEvery { accountDao.getAccountById(10L) } returns account
+
+            val success = repository.switchToAccount(10L)
+            advanceUntilIdle()
+
+            assertTrue(success)
+            verify(exactly = 1) { workManager.updateSession() }
+            verify(exactly = 1) { workManager.updateCredentialsUpdate() }
+            cleanup()
+        }
+
+    @Test
+    fun `switchToAccount triggers seamless vpnController connect when VPN is active`() =
+        runTest {
+            val repository = buildRepository()
+            val account = createAccountEntity(id = 10L, username = "switch_user")
+            coEvery { accountDao.getAccountById(10L) } returns account
+            every { vpnConnectionStateManager.isVPNActive() } returns true
+
+            val success = repository.switchToAccount(10L)
+            advanceUntilIdle()
+
+            assertTrue(success)
+            coVerify(exactly = 1) { vpnController.connect(any(), any(), any(), any()) }
+            cleanup()
+        }
+
+    @Test
+    fun `switchToAccount does not trigger vpnController connect when VPN is disconnected`() =
+        runTest {
+            val repository = buildRepository()
+            val account = createAccountEntity(id = 10L, username = "switch_user")
+            coEvery { accountDao.getAccountById(10L) } returns account
+            every { vpnConnectionStateManager.isVPNActive() } returns false
+
+            val success = repository.switchToAccount(10L)
+            advanceUntilIdle()
+
+            assertTrue(success)
+            coVerify(exactly = 0) { vpnController.connect(any(), any(), any(), any()) }
+            cleanup()
+        }
+
+    // ==========================================
+    // 7. Bulk import tests
+    // ==========================================
+
+    @Test
+    fun `importAccountsBulk persists accounts with isActive false and unique profiles`() =
+        runTest {
+            val repository = buildRepository()
+            val activeAcc = createAccountEntity(id = 1L, username = "current_active", isActive = true)
+            coEvery { accountDao.getActiveAccount() } returns activeAcc
+            coEvery { accountDao.getAccountByUsername(any()) } returns null
+
+            val insertedAccounts = mutableListOf<AccountEntity>()
+            coEvery { accountDao.insertOrUpdate(capture(insertedAccounts)) } returns 100L
+
+            val authToken =
+                com.windscribe.vpn.api.response
+                    .AuthToken(token = "token123", captcha = null)
+            val authResp = GenericResponseClass<com.windscribe.vpn.api.response.AuthToken?, ApiErrorResponse?>(authToken, null)
+            coEvery { apiManager.authTokenLogin(any(), false) } returns authResp
+
+            val loginResp1 = createLoginResponse(username = "user1")
+            val loginResp2 = createLoginResponse(username = "user2")
+            coEvery { apiManager.logUserIn("user1", "pass1", any(), any(), any(), any(), any()) } returns
+                GenericResponseClass(loginResp1, null)
+            coEvery { apiManager.logUserIn("user2", "pass2", any(), any(), any(), any(), any()) } returns
+                GenericResponseClass(loginResp2, null)
+
+            val credentials = listOf("user1" to "pass1", "user2" to "pass2")
+            val statuses = mutableListOf<BulkImportStatus>()
+
+            val result =
+                repository.importAccountsBulk(credentials) { _, _, status ->
+                    statuses.add(status)
+                }
+            advanceUntilIdle()
+
+            assertEquals(2, result.totalProcessed)
+            assertEquals(2, result.successCount)
+            assertEquals(0, result.failedCount)
+
+            assertEquals(2, insertedAccounts.size)
+            assertFalse(insertedAccounts[0].isActive)
+            assertFalse(insertedAccounts[1].isActive)
+            assertEquals("user1", insertedAccounts[0].username)
+            assertEquals("user2", insertedAccounts[1].username)
+            // Distinct virtual device fingerprints
+            org.junit.Assert.assertNotEquals(insertedAccounts[0].virtualCuid, insertedAccounts[1].virtualCuid)
+            org.junit.Assert.assertNotEquals(insertedAccounts[0].virtualMac, insertedAccounts[1].virtualMac)
+
+            // Current active account in repository remains untouched
+            cleanup()
+        }
+
+    @Test
+    fun `importAccountsBulk handles blank credentials and captcha gracefully`() =
+        runTest {
+            val repository = buildRepository()
+            coEvery { accountDao.getActiveAccount() } returns null
+
+            val captchaObj =
+                com.windscribe.vpn.api.response
+                    .Captcha(asciiArt = "art")
+            val captchaAuthToken =
+                com.windscribe.vpn.api.response
+                    .AuthToken(token = "tok", captcha = captchaObj)
+            coEvery { apiManager.authTokenLogin("captcha_user", false) } returns
+                GenericResponseClass(captchaAuthToken, null)
+
+            val credentials = listOf("" to "pass", "captcha_user" to "pass")
+            val result = repository.importAccountsBulk(credentials)
+            advanceUntilIdle()
+
+            assertEquals(2, result.totalProcessed)
+            assertEquals(0, result.successCount)
+            assertEquals(2, result.failedCount)
             cleanup()
         }
 }
