@@ -912,47 +912,61 @@ private fun HeaderDataGauge(
             AppColors.neonGreen
         }
 
-    Box(
+    val singleLineData = freeState.dataLeft.replace("\n", " ")
+
+    Row(
         modifier =
             Modifier
-                .size(32.dp)
-                .clickable { onClick() },
-        contentAlignment = Alignment.Center,
+                .clip(RoundedCornerShape(percent = 50))
+                .background(color = AppColors.midnightNavy)
+                .border(
+                    width = 1.dp,
+                    color = AppColors.white.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(percent = 50),
+                ).clickable { onClick() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(
-            modifier = Modifier.size(32.dp),
+        Box(
+            modifier = Modifier.size(16.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            val strokeWidth = 2.5.dp.toPx()
+            Canvas(
+                modifier = Modifier.size(16.dp),
+            ) {
+                val strokeWidth = 2.dp.toPx()
 
-            drawArc(
-                color = AppColors.white.copy(alpha = 0.20f),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                size = Size(size.width, size.height),
-                topLeft = Offset.Zero,
-            )
-
-            if (angle > 0f) {
                 drawArc(
-                    color = gaugeColor,
-                    startAngle = -90f,
-                    sweepAngle = angle,
+                    color = AppColors.white.copy(alpha = 0.20f),
+                    startAngle = 0f,
+                    sweepAngle = 360f,
                     useCenter = false,
                     style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
                     size = Size(size.width, size.height),
                     topLeft = Offset.Zero,
                 )
+
+                if (angle > 0f) {
+                    drawArc(
+                        color = gaugeColor,
+                        startAngle = -90f,
+                        sweepAngle = angle,
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                        size = Size(size.width, size.height),
+                        topLeft = Offset.Zero,
+                    )
+                }
             }
         }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
         Text(
-            text = freeState.dataLeft,
-            style = font9.copy(fontSize = 7.5.sp),
-            lineHeight = 7.5.sp,
-            textAlign = TextAlign.Center,
+            text = singleLineData,
+            style = font12.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
             color = textColor,
-            modifier = Modifier.align(Alignment.Center),
+            maxLines = 1,
         )
     }
 }
