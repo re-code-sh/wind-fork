@@ -171,6 +171,17 @@ class AccountVaultRepositoryImpl
                 } catch (_: Exception) {
                     null
                 } ?: return null
+
+            val username = sessionResponse.userName ?: preferencesHelper.userName
+            val existing = accountDao.getAccountByUsername(username)
+            if (existing != null) {
+                val active = accountDao.getActiveAccount()
+                if (active == null) {
+                    switchToAccount(existing.id)
+                }
+                return existing.id
+            }
+
             return addOrUpdateAccount(sessionResponse, currentHash)
         }
 
@@ -190,7 +201,31 @@ class AccountVaultRepositoryImpl
             )
 
             _activeAccount.value = account.copy(isActive = true)
-            userRepository.reload()
+
+            val sessionResponse =
+                try {
+                    Gson().fromJson(account.rawSessionJson, UserSessionResponse::class.java)
+                } catch (e: Exception) {
+                    logger.error("Failed to parse rawSessionJson for account ${account.username}: ${e.message}")
+                    null
+                } ?: UserSessionResponse().apply {
+                    this.userName = account.username
+                    this.isPremium = if (account.isPro) 1 else 0
+                    this.trafficMax = account.trafficMax.toString()
+                    this.trafficUsed = account.trafficUsed.toString()
+                    this.userAccountStatus = 1
+                }
+
+            sessionResponse.apply {
+                if (account.trafficMax > 0L) {
+                    this.trafficMax = account.trafficMax.toString()
+                }
+                this.trafficUsed = account.trafficUsed.toString()
+                this.userName = account.username
+                this.isPremium = if (account.isPro) 1 else 0
+            }
+
+            userRepository.reload(sessionResponse)
 
             try {
                 workManager.get().updateSession()

@@ -213,7 +213,7 @@ class AccountVaultRepositoryTest {
             verify { preferencesHelper.userName = "alice" }
             verify { preferencesHelper.userStatus = 1 }
             verify { preferencesHelper.getSession = any() }
-            verify { userRepository.reload() }
+            verify { userRepository.reload(match { it.userName == "alice" }) }
             assertEquals("alice", repository.activeAccount.value?.username)
             cleanup()
         }
@@ -285,7 +285,7 @@ class AccountVaultRepositoryTest {
             assertEquals("cuid-carol-123", cdLib.getCuid())
             assertEquals("11:22:33:44:55:66", cdLib.getMacAddress())
             assertEquals("Xiaomi-14", cdLib.getHostName())
-            verify { userRepository.reload() }
+            verify { userRepository.reload(match { it.userName == "carol" }) }
             assertEquals(10L, repository.activeAccount.value?.id)
             cleanup()
         }
@@ -301,6 +301,7 @@ class AccountVaultRepositoryTest {
 
             assertFalse(result)
             coVerify(exactly = 0) { accountDao.setActiveAccount(any()) }
+            verify(exactly = 0) { userRepository.reload(any()) }
             verify(exactly = 0) { userRepository.reload() }
             cleanup()
         }
@@ -519,6 +520,50 @@ class AccountVaultRepositoryTest {
 
             assertTrue(success)
             coVerify(exactly = 0) { vpnController.connect(any(), any(), any(), any()) }
+            cleanup()
+        }
+
+    // ==========================================
+    // 6. saveCurrentSessionToVault tests
+    // ==========================================
+
+    @Test
+    fun `saveCurrentSessionToVault returns existing account id without re-switching if already active`() =
+        runTest {
+            val repository = buildRepository()
+            val existing = createAccountEntity(id = 7L, username = "legacy_user", isActive = true)
+            every { preferencesHelper.sessionHash } returns "legacy_hash"
+            every { preferencesHelper.getSession } returns """{"username":"legacy_user","is_premium":0}"""
+            coEvery { accountDao.getAccountByUsername("legacy_user") } returns existing
+            coEvery { accountDao.getActiveAccount() } returns existing
+
+            val result = repository.saveCurrentSessionToVault()
+            advanceUntilIdle()
+
+            assertEquals(7L, result)
+            coVerify(exactly = 0) { accountDao.setActiveAccount(any()) }
+            cleanup()
+        }
+
+    @Test
+    fun `saveCurrentSessionToVault saves and switches when account not yet in vault`() =
+        runTest {
+            val repository = buildRepository()
+            every { preferencesHelper.sessionHash } returns "first_hash"
+            every { preferencesHelper.getSession } returns """{"username":"first_user","is_premium":1}"""
+            coEvery { accountDao.getAccountByUsername("first_user") } returns null
+            coEvery { accountDao.getActiveAccount() } returns null
+
+            val entitySlot = slot<AccountEntity>()
+            coEvery { accountDao.insertOrUpdate(capture(entitySlot)) } returns 15L
+            coEvery { accountDao.getAccountById(15L) } answers { entitySlot.captured.copy(id = 15L) }
+
+            val result = repository.saveCurrentSessionToVault()
+            advanceUntilIdle()
+
+            assertEquals(15L, result)
+            coVerify { accountDao.setActiveAccount(15L) }
+            verify { userRepository.reload(match { it.userName == "first_user" }) }
             cleanup()
         }
 }
