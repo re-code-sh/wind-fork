@@ -13,7 +13,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,12 +50,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -914,57 +916,97 @@ private fun HeaderDataGauge(
 
     val singleLineData = freeState.dataLeft.replace("\n", " ")
 
-    Row(
+    Box(
         modifier =
             Modifier
-                .clip(RoundedCornerShape(percent = 50))
+                .height(24.dp)
+                .drawWithCache {
+                    val strokeWidth = 2.dp.toPx()
+                    if (size.width <= strokeWidth || size.height <= strokeWidth) {
+                        return@drawWithCache onDrawWithContent {
+                            drawContent()
+                        }
+                    }
+
+                    val inset = strokeWidth / 2f
+                    val w = size.width - strokeWidth
+                    val h = size.height - strokeWidth
+                    val r = minOf(h / 2f, w / 2f)
+
+                    val basePath =
+                        Path().apply {
+                            moveTo(size.width / 2f, inset)
+                            lineTo(size.width - inset - r, inset)
+                            arcTo(
+                                rect =
+                                    Rect(
+                                        left = size.width - inset - 2 * r,
+                                        top = inset,
+                                        right = size.width - inset,
+                                        bottom = inset + 2 * r,
+                                    ),
+                                startAngleDegrees = -90f,
+                                sweepAngleDegrees = 180f,
+                                forceMoveTo = false,
+                            )
+                            lineTo(inset + r, size.height - inset)
+                            arcTo(
+                                rect =
+                                    Rect(
+                                        left = inset,
+                                        top = inset,
+                                        right = inset + 2 * r,
+                                        bottom = inset + 2 * r,
+                                    ),
+                                startAngleDegrees = 90f,
+                                sweepAngleDegrees = 180f,
+                                forceMoveTo = false,
+                            )
+                            lineTo(size.width / 2f, inset)
+                            close()
+                        }
+
+                    val pathMeasure = PathMeasure()
+                    pathMeasure.setPath(basePath, forceClosed = true)
+                    val totalLength = pathMeasure.length
+                    val progress = (angle / 360f).coerceIn(0f, 1f)
+                    val progressLength = totalLength * progress
+
+                    val progressPath = Path()
+                    if (progress > 0f && progress < 1f) {
+                        pathMeasure.getSegment(0f, progressLength, progressPath, startWithMoveTo = true)
+                    }
+
+                    onDrawWithContent {
+                        drawContent()
+                        drawPath(
+                            path = basePath,
+                            color = AppColors.white.copy(alpha = 0.15f),
+                            style = Stroke(width = strokeWidth),
+                        )
+                        if (progress >= 1f) {
+                            drawPath(
+                                path = basePath,
+                                color = gaugeColor,
+                                style = Stroke(width = strokeWidth),
+                            )
+                        } else if (progress > 0f) {
+                            drawPath(
+                                path = progressPath,
+                                color = gaugeColor,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                            )
+                        }
+                    }
+                }.clip(RoundedCornerShape(percent = 50))
                 .background(color = AppColors.midnightNavy)
-                .border(
-                    width = 1.dp,
-                    color = AppColors.white.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(percent = 50),
-                ).clickable { onClick() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+                .clickable { onClick() }
+                .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier.size(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Canvas(
-                modifier = Modifier.size(16.dp),
-            ) {
-                val strokeWidth = 2.dp.toPx()
-
-                drawArc(
-                    color = AppColors.white.copy(alpha = 0.20f),
-                    startAngle = 0f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                    size = Size(size.width, size.height),
-                    topLeft = Offset.Zero,
-                )
-
-                if (angle > 0f) {
-                    drawArc(
-                        color = gaugeColor,
-                        startAngle = -90f,
-                        sweepAngle = angle,
-                        useCenter = false,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-                        size = Size(size.width, size.height),
-                        topLeft = Offset.Zero,
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(6.dp))
-
         Text(
             text = singleLineData,
-            style = font12.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+            style = font12.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
             color = textColor,
             maxLines = 1,
         )
